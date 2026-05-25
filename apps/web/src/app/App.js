@@ -35,6 +35,7 @@ const EMPTY_CATALOG = {
   returns: []
 };
 const FALLBACK_CATALOG = normalizeCatalogPayload(createDevelopmentPlanCatalog());
+const API_BASE_URL_OVERRIDE_KEY = "lumiar-flow-api-base-url-override";
 function normalizeAccessLevel(level) {
   const normalized = String(level ?? "").trim().toLowerCase();
 
@@ -1263,7 +1264,7 @@ function PendingApprovalPage({ onLogout }) {
               <h1>Seu cadastro está aguardando aprovação do administrador.</h1>
               <p>
                 Assim que um admin liberar o acesso, você poderá entrar normalmente e usar a
-                a plataforma Lumiar Flow.
+                plataforma Lumiar Flow.
               </p>
               <button type="button" className="auth-submit" onClick=${onLogout}>
                 Voltar para o login
@@ -1277,6 +1278,11 @@ function PendingApprovalPage({ onLogout }) {
 }
 
 function getApiBaseUrl() {
+  const overrideBaseUrl = readApiBaseUrlOverride();
+  if (overrideBaseUrl) {
+    return overrideBaseUrl;
+  }
+
   const configuredBaseUrl = String(import.meta.env.VITE_API_BASE_URL ?? "").trim();
 
   if (configuredBaseUrl) {
@@ -1284,6 +1290,26 @@ function getApiBaseUrl() {
   }
 
   return "/api";
+}
+
+function readApiBaseUrlOverride() {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  try {
+    const url = new URL(window.location.href);
+    const queryOverride = String(url.searchParams.get("apiBaseUrl") ?? "").trim();
+
+    if (queryOverride) {
+      window.localStorage?.setItem(API_BASE_URL_OVERRIDE_KEY, queryOverride);
+      return queryOverride;
+    }
+
+    return String(window.localStorage?.getItem(API_BASE_URL_OVERRIDE_KEY) ?? "").trim();
+  } catch {
+    return String(window.localStorage?.getItem(API_BASE_URL_OVERRIDE_KEY) ?? "").trim();
+  }
 }
 
 function normalizeCatalogPayload(data) {

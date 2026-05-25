@@ -44,17 +44,31 @@ export function createAdminApiClient(baseUrl) {
 }
 
 async function request(url, init) {
-  const response = await fetch(url, {
-    ...init,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(init.headers ?? {})
-    }
-  });
+  let response;
+
+  try {
+    response = await fetch(url, {
+      ...init,
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(init.headers ?? {})
+      }
+    });
+  } catch (error) {
+    throw buildNetworkError(url, error);
+  }
 
   const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
+  let data = null;
+
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = null;
+    }
+  }
 
   if (!response.ok) {
     throw new Error(
@@ -63,4 +77,11 @@ async function request(url, init) {
   }
 
   return data;
+}
+
+function buildNetworkError(url, cause) {
+  const host = new URL(url, window.location.origin).host;
+  const error = new Error(`Nao foi possivel conectar ao painel administrativo em ${host}.`);
+  error.cause = cause;
+  return error;
 }

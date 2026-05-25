@@ -30,14 +30,20 @@ export function createLoanApiClient(baseUrl) {
 }
 
 async function request(url, init) {
-  const response = await fetch(url, {
-    ...init,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(init.headers ?? {})
-    }
-  });
+  let response;
+
+  try {
+    response = await fetch(url, {
+      ...init,
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(init.headers ?? {})
+      }
+    });
+  } catch (error) {
+    throw buildNetworkError(url, error);
+  }
 
   const text = await response.text();
   let data = null;
@@ -66,4 +72,13 @@ async function request(url, init) {
   }
 
   return data;
+}
+
+function buildNetworkError(url, cause) {
+  const host = new URL(url, window.location.origin).host;
+  const error = new Error(
+    `Nao foi possivel conectar ao servidor em ${host}. Verifique o endpoint do staging.`
+  );
+  error.cause = cause;
+  return error;
 }

@@ -22,14 +22,20 @@ export function createAuthApiClient(baseUrl) {
 }
 
 async function request(url, init) {
-  const response = await fetch(url, {
-    ...init,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(init.headers ?? {})
-    }
-  });
+  let response;
+
+  try {
+    response = await fetch(url, {
+      ...init,
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(init.headers ?? {})
+      }
+    });
+  } catch (error) {
+    throw buildNetworkError(url, error);
+  }
 
   const text = await response.text();
   let data = null;
@@ -57,4 +63,13 @@ async function request(url, init) {
   }
 
   return data;
+}
+
+function buildNetworkError(url, cause) {
+  const host = new URL(url, window.location.origin).host;
+  const error = new Error(
+    `Nao foi possivel conectar a API em ${host}. Verifique a URL do staging e a propagacao do DNS.`
+  );
+  error.cause = cause;
+  return error;
 }
