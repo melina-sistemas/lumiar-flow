@@ -350,6 +350,117 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
     [catalog, state]
   );
 
+  async function submitRegistrationRequestSecure(input) {
+    const normalizedEmail = String(input.email || "").trim().toLowerCase();
+
+    if (
+      state.users.some((user) => String(user.email || "").trim().toLowerCase() === normalizedEmail)
+    ) {
+      return {
+        success: false,
+        message: "Ja existe um cadastro com este e-mail."
+      };
+    }
+
+    if (!adminApi || typeof adminApi.registerUser !== "function") {
+      return {
+        success: false,
+        message: "Nao foi possivel conectar ao servidor de autenticacao."
+      };
+    }
+
+    try {
+      const result = await adminApi.registerUser(input);
+      const nextUser = normalizeAdminUser(result.user ?? {});
+
+      setState((current) =>
+        stabilizeAdminState({
+          ...current,
+          users: upsertUserIntoState(current.users, nextUser)
+        })
+      );
+
+      return {
+        success: true,
+        message:
+          result.message ??
+          "Solicitação enviada com sucesso. Aguarde a aprovação do administrador.",
+        user: nextUser
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Nao foi possivel enviar sua solicitacao."
+      };
+    }
+  }
+
+  async function createManagedUserSecure(input) {
+    if (!adminApi || typeof adminApi.createManagedUser !== "function") {
+      return {
+        success: false,
+        message: "Nao foi possivel conectar ao servidor de autenticacao."
+      };
+    }
+
+    try {
+      const result = await adminApi.createManagedUser(input);
+      const nextUser = normalizeAdminUser(result.user ?? {});
+
+      setState((current) =>
+        stabilizeAdminState({
+          ...current,
+          users: upsertUserIntoState(current.users, nextUser)
+        })
+      );
+
+      return {
+        success: true,
+        message:
+          result.message ??
+          "Usuario criado com sucesso. A senha inicial foi registrada no servidor.",
+        user: nextUser
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Nao foi possivel cadastrar o usuario."
+      };
+    }
+  }
+
+  async function changePasswordSecure(userId, newPassword) {
+    if (!adminApi || typeof adminApi.changePassword !== "function") {
+      return {
+        success: false,
+        message: "Nao foi possivel conectar ao servidor de autenticacao."
+      };
+    }
+
+    try {
+      const result = await adminApi.changePassword({ userId, newPassword });
+      const nextUser = normalizeAdminUser(result.user ?? {});
+
+      setState((current) =>
+        stabilizeAdminState({
+          ...current,
+          users: upsertUserIntoState(current.users, nextUser)
+        })
+      );
+
+      return {
+        success: true,
+        message: result.message ?? "Senha atualizada com sucesso.",
+        user: nextUser
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Nao foi possivel atualizar a senha."
+      };
+    }
+  }
+
   function createBook(input) {
     const id = input.id || `admin-book-${Date.now().toString(36)}`;
     const nextBook = normalizeAdminBook({
