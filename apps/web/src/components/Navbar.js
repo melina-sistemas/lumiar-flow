@@ -1,6 +1,7 @@
-﻿import React from "react";
+import React from "react";
 import htm from "htm";
 import { Link, NavLink } from "react-router-dom";
+import { BrandImage } from "./BrandImage.js";
 
 const html = htm.bind(React.createElement);
 
@@ -43,7 +44,7 @@ const MENU_GROUPS = [
 ];
 
 const ADMIN_GROUP = {
-    label: "Admin",
+  label: "Admin",
   to: "/admin/books",
   items: [
     { label: "Livros", to: "/admin/books" },
@@ -57,19 +58,28 @@ const ADMIN_GROUP = {
   ]
 };
 
-export function Navbar({ currentUser }) {
+export function Navbar({ currentUser, branding = null }) {
   const menuGroups =
     currentUser?.role === "admin" ? [...MENU_GROUPS, ADMIN_GROUP] : MENU_GROUPS;
+  const logoSrc = branding?.logoPrimarySrc ?? branding?.logoSrc ?? "/storage/branding/logo-lumiar.png";
+  const systemName = branding?.systemName ?? "Lumiar Flow";
+  const [firstPart, ...restParts] = systemName.split(" ");
+  const secondPart = restParts.join(" ") || "Flow";
 
   return html`
     <div className="header-top">
       <div className="logo-container">
         <${Link} to="/livros" className="brand-link">
-          <img className="logo-img" src="/forja-icon.png" alt="Forja" />
+          <${BrandImage}
+            className="logo-img"
+            src=${logoSrc}
+            fallbackSrc=${branding?.logoPrimarySrc ?? logoSrc}
+            alt=${systemName}
+          />
           <span className="logo-text">
-            <span className="light">FOR</span><span className="bold">JA</span>
+            <span className="light">${firstPart}</span><span className="bold">${secondPart}</span>
           </span>
-        <//>
+        </${Link}>
       </div>
 
       <div className="header-actions">
@@ -112,4 +122,3 @@ export function Navbar({ currentUser }) {
     </nav>
   `;
 }
-

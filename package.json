@@ -1,5 +1,5 @@
 {
-  "name": "biblioteca-interna",
+  "name": "lumiar-flow",
   "version": "0.1.0",
   "private": true,
   "workspaces": [
@@ -7,11 +7,12 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:web": "npm --workspace @biblioteca/web run dev",
-    "dev:api": "npm --workspace @biblioteca/api run dev",
+    "dev:web": "npm --workspace @lumiar-flow/web run dev",
+    "dev:api": "npm --workspace @lumiar-flow/api run dev",
+    "start:web": "npm --workspace @lumiar-flow/web run start",
+    "start:api": "npm --workspace @lumiar-flow/api run start",
     "build": "npm run build --workspaces",
     "lint": "npm run lint --workspaces",
     "test": "npm run test --workspaces"
   }
 }
-

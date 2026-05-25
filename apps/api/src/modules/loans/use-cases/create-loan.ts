@@ -3,8 +3,8 @@ import {
   type CreateLoanResult,
   calculateDueDate,
   canCreateLoan
-} from "@biblioteca/shared";
-import type { Loan } from "@biblioteca/shared";
+} from "@lumiar-flow/shared";
+import type { Loan } from "@lumiar-flow/shared";
 import type { LoanRepository } from "../loan-repository";
 import {
   defaultUseCaseContext,

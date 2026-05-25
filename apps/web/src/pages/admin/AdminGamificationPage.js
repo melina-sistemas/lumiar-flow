@@ -21,7 +21,7 @@ export function AdminGamificationPage({ gamification, actions }) {
     <${AdminPageLayout}
       title="Gamificação"
       breadcrumb="Gamificação"
-      description="Configure recompensas e penalidades para o ranking FORJA."
+      description="Configure recompensas e penalidades para o ranking Lumiar Flow."
       actions=${actionsBar}
     >
       <section className="admin-summary-grid">

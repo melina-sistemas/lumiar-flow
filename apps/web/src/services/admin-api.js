@@ -18,6 +18,27 @@ export function createAdminApiClient(baseUrl) {
         method: "POST",
         body: JSON.stringify({ books })
       });
+    },
+
+    async registerUser(input) {
+      return request(`${baseUrl}/auth/register`, {
+        method: "POST",
+        body: JSON.stringify(input)
+      });
+    },
+
+    async createManagedUser(input) {
+      return request(`${baseUrl}/admin/users`, {
+        method: "POST",
+        body: JSON.stringify(input)
+      });
+    },
+
+    async changePassword(input) {
+      return request(`${baseUrl}/auth/password`, {
+        method: "POST",
+        body: JSON.stringify(input)
+      });
     }
   };
 }
@@ -25,6 +46,7 @@ export function createAdminApiClient(baseUrl) {
 async function request(url, init) {
   const response = await fetch(url, {
     ...init,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...(init.headers ?? {})

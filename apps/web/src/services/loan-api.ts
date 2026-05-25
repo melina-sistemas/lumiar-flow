@@ -3,7 +3,7 @@ import type {
   CreateLoanResult,
   ReturnLoanRequest,
   ReturnLoanResult
-} from "@biblioteca/shared";
+} from "@lumiar-flow/shared";
 
 export interface LoanApiClient {
   createLoan(input: CreateLoanRequest): Promise<CreateLoanResult>;

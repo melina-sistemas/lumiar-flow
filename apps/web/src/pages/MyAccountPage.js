@@ -246,7 +246,7 @@ export function MyAccountPage({ currentUser, books, loans, waitlists = [], notif
                       ? html`
                           <form
                             className="account-password-form"
-                            onSubmit=${(event) => {
+                            onSubmit=${async (event) => {
                               event.preventDefault();
 
                               if (!passwordForm.password || passwordForm.password !== passwordForm.confirmPassword) {
@@ -258,7 +258,9 @@ export function MyAccountPage({ currentUser, books, loans, waitlists = [], notif
                                 return;
                               }
 
-                              const result = actions.changePassword(currentUser.id, passwordForm.password);
+                              const result = await Promise.resolve(
+                                actions.changePassword(currentUser.id, passwordForm.password)
+                              );
                               setFeedback({
                                 tone: result.success ? "success" : "error",
                                 title: result.success ? "Senha atualizada" : "Não foi possível atualizar",
@@ -470,7 +472,7 @@ export function MyAccountPage({ currentUser, books, loans, waitlists = [], notif
                 : html`
                     <article className="account-reading-card account-empty-card">
                       <strong>Sem recomendações no momento</strong>
-                      <span>A FORJA vai sugerir leituras conforme você usar mais o sistema.</span>
+                      <span>A Lumiar Flow vai sugerir leituras conforme você usar mais o sistema.</span>
                     </article>
                   `}
             </div>
@@ -661,7 +663,7 @@ function renderBookCover(book) {
   if (book?.coverUrl) {
     return html`<img
       src=${book.coverUrl}
-      alt=${`Capa do livro ${book.title || "FORJA"}`}
+      alt=${`Capa do livro ${book.title || "Lumiar Flow"}`}
       loading="lazy"
       onError=${(event) => {
         const image = event.currentTarget;

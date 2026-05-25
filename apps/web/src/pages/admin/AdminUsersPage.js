@@ -335,9 +335,9 @@ export function AdminUsersPage({ users, loans, books, returns = [], actions }) {
               setShowCreateModal(false);
               setAdminCreateFeedback("");
             },
-            onSubmit: (event) => {
+            onSubmit: async (event) => {
               event.preventDefault();
-              const result = actions.createManagedUser(adminCreateForm);
+              const result = await Promise.resolve(actions.createManagedUser(adminCreateForm));
               setAdminCreateFeedback(result.message);
 
               if (result.success) {

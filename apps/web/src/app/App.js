@@ -7,6 +7,7 @@ import { PageLayout } from "../components/PageLayout.js";
 import { AuthPage } from "../features/auth/AuthPage.js";
 import { useAdminPanel } from "../features/admin/admin-state.js";
 import { enrichBooksWithGoogleBooks } from "../services/google-books.js";
+import { createAuthApiClient } from "../services/auth-api.js";
 import { createLoanApiClient } from "../services/loan-api.js";
 import { BooksPage } from "../pages/BooksPage.js";
 import { AccountRequestSentPage } from "../pages/AccountRequestSentPage.js";
@@ -23,6 +24,7 @@ import { AdminLoansPage } from "../pages/admin/AdminLoansPage.js";
 import { AdminMonitoringPage } from "../pages/admin/AdminMonitoringPage.js";
 import { AdminSettingsPage } from "../pages/admin/AdminSettingsPage.js";
 import { createDevelopmentPlanCatalog } from "../data/development-plan-data.js";
+import { resolveBrandAppearance, resolveThemeMode } from "../features/branding/brand-theme.js";
 
 const html = htm.bind(React.createElement);
 
@@ -33,8 +35,6 @@ const EMPTY_CATALOG = {
   returns: []
 };
 const FALLBACK_CATALOG = normalizeCatalogPayload(createDevelopmentPlanCatalog());
-const AUTH_STORAGE_KEY = "forja-auth-session-v1";
-
 function normalizeAccessLevel(level) {
   const normalized = String(level ?? "").trim().toLowerCase();
 
@@ -119,9 +119,11 @@ function isRejectedOrBlockedAuthUser(user) {
 
 export function App() {
   const apiBaseUrl = getApiBaseUrl();
+  const authApi = useMemo(() => createAuthApiClient(apiBaseUrl), [apiBaseUrl]);
   const location = useLocation();
   const navigate = useNavigate();
-  const [authUser, setAuthUser] = useState(() => readAuthSession());
+  const [authUser, setAuthUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [catalog, setCatalog] = useState(EMPTY_CATALOG);
   const [loadingCatalog, setLoadingCatalog] = useState(true);
   const [catalogError, setCatalogError] = useState(null);
@@ -135,9 +137,21 @@ export function App() {
     location.pathname === "/cadastro/solicitacao-enviada";
   const activeAuthUser = normalizeAuthUser(authUser);
   const adminPanel = useAdminPanel(catalog, activeAuthUser, apiBaseUrl, !loadingCatalog);
+  const brandTheme = useMemo(
+    () => resolveBrandAppearance(adminPanel.settings),
+    [adminPanel.settings]
+  );
+  const [preferredTheme, setPreferredTheme] = useState(() =>
+    getPreferredColorScheme()
+  );
+  const [validatedBrandAssets, setValidatedBrandAssets] = useState(() => ({
+    faviconSrc: brandTheme.faviconSrc,
+    loginBannerSrc: brandTheme.loginBannerSrc,
+    dashboardBackgroundSrc: brandTheme.dashboardBackgroundSrc
+  }));
   const isAuthenticated = Boolean(activeAuthUser);
   const hasApprovedAccess = isAuthenticated && isApprovedAuthUser(activeAuthUser);
-  const canUseLibraryAccess = isAuthenticated && !isRejectedOrBlockedAuthUser(activeAuthUser);
+  const canUseLibraryAccess = hasApprovedAccess;
   const isBooksRoute = location.pathname.startsWith("/livros");
   const isUsersRoute = location.pathname.startsWith("/usuarios");
   const isReportsRoute = location.pathname.startsWith("/relatorios");
@@ -241,11 +255,109 @@ export function App() {
   ).length;
 
   useEffect(() => {
-    writeAuthSession(authUser);
-  }, [authUser]);
+    const media = globalThis.matchMedia?.("(prefers-color-scheme: dark)");
+
+    if (!media) {
+      return undefined;
+    }
+
+    const updateTheme = () => {
+      setPreferredTheme(media.matches ? "dark" : "light");
+    };
+
+    updateTheme();
+    media.addEventListener?.("change", updateTheme);
+
+    return () => {
+      media.removeEventListener?.("change", updateTheme);
+    };
+  }, []);
+
+  const effectiveTheme = resolveThemeMode(
+    brandTheme.themeMode,
+    preferredTheme === "dark"
+  );
 
   useEffect(() => {
-    if (loadingCatalog || !authUser) {
+    let cancelled = false;
+
+    async function validateAssets() {
+      const [faviconSrc, loginBannerSrc, dashboardBackgroundSrc] = await Promise.all([
+        resolveImageWithFallback(brandTheme.faviconSrc, brandTheme.faviconFallbackSrc),
+        resolveImageWithFallback(brandTheme.loginBannerSrc, brandTheme.loginBannerFallbackSrc),
+        resolveImageWithFallback(
+          brandTheme.dashboardBackgroundSrc,
+          brandTheme.dashboardBackgroundFallbackSrc
+        )
+      ]);
+
+      if (!cancelled) {
+        setValidatedBrandAssets({
+          faviconSrc,
+          loginBannerSrc,
+          dashboardBackgroundSrc
+        });
+      }
+    }
+
+    validateAssets();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    brandTheme.dashboardBackgroundFallbackSrc,
+    brandTheme.dashboardBackgroundSrc,
+    brandTheme.faviconFallbackSrc,
+    brandTheme.faviconSrc,
+    brandTheme.loginBannerFallbackSrc,
+    brandTheme.loginBannerSrc
+  ]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const body = document.body;
+    const cssVars = brandTheme.cssVars ?? {};
+
+    for (const [key, value] of Object.entries(cssVars)) {
+      if (value) {
+        root.style.setProperty(key, String(value));
+      }
+    }
+
+    body.dataset.brandLayout = brandTheme.layoutVariant;
+    body.dataset.brandPalette = brandTheme.paletteVariant;
+    body.dataset.brandBackground = brandTheme.backgroundVariant;
+    body.dataset.brandTheme = effectiveTheme;
+    body.dataset.brandThemeSetting = brandTheme.themeMode;
+    body.dataset.brandLogo = brandTheme.logoVariant;
+    body.dataset.brandIcon = brandTheme.iconVariant;
+    body.dataset.brandFavicon = brandTheme.faviconVariant;
+
+    root.style.colorScheme = effectiveTheme;
+    root.style.setProperty(
+      "--login-banner-image",
+      `url("${validatedBrandAssets.loginBannerSrc}")`
+    );
+    root.style.setProperty(
+      "--dashboard-background-image",
+      `url("${validatedBrandAssets.dashboardBackgroundSrc}")`
+    );
+
+    const title = `${brandTheme.systemName} - ${brandTheme.slogan}`;
+    document.title = title;
+
+    let favicon = document.querySelector('link[rel="icon"]');
+    if (!favicon) {
+      favicon = document.createElement("link");
+      favicon.rel = "icon";
+      document.head.appendChild(favicon);
+    }
+    favicon.href = validatedBrandAssets.faviconSrc;
+  }, [brandTheme, effectiveTheme, validatedBrandAssets]);
+
+  useEffect(() => {
+    if (authLoading || loadingCatalog || !authUser) {
       return;
     }
 
@@ -266,8 +378,12 @@ export function App() {
     }
 
     setAuthUser((current) => {
-      if (!current || current.id !== matchedSessionUser.id) {
-        return current;
+      if (!current) {
+        return normalizeAuthUser({
+          ...matchedSessionUser,
+          status: matchedStatus,
+          accessStatus: matchedStatus
+        });
       }
 
       const nextSnapshot = [
@@ -306,7 +422,23 @@ export function App() {
         accessStatus: matchedStatus
       });
     });
-  }, [authUser, loadingCatalog, matchedSessionUser, navigate]);
+
+    if (matchedStatus === "pending") {
+      if (location.pathname !== "/cadastro/aguardando-aprovacao") {
+        navigate("/cadastro/aguardando-aprovacao", { replace: true });
+      }
+      return;
+    }
+
+    if (
+      location.pathname === "/entrar" ||
+      location.pathname === "/cadastrar" ||
+      location.pathname === "/cadastro/aguardando-aprovacao" ||
+      location.pathname === "/cadastro/solicitacao-enviada"
+    ) {
+      navigate("/livros", { replace: true });
+    }
+  }, [authLoading, authUser, loadingCatalog, location.pathname, matchedSessionUser, navigate]);
 
   useEffect(() => {
     let ignore = false;
@@ -384,6 +516,38 @@ export function App() {
       ignore = true;
     };
   }, [apiBaseUrl]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadSession() {
+      setAuthLoading(true);
+
+      try {
+        const result = await authApi.me();
+
+        if (ignore) {
+          return;
+        }
+
+        setAuthUser(result?.user ? normalizeAuthUser(result.user) : null);
+      } catch {
+        if (!ignore) {
+          setAuthUser(null);
+        }
+      } finally {
+        if (!ignore) {
+          setAuthLoading(false);
+        }
+      }
+    }
+
+    loadSession();
+
+    return () => {
+      ignore = true;
+    };
+  }, [authApi]);
 
   useEffect(() => {
     const stillExists = libraryBooks.some((book) => book.id === selectedBookId);
@@ -469,79 +633,53 @@ export function App() {
     currentReaderLoans,
     hasApprovedAccess
   };
-  function handleLogin(credentials) {
-    const normalizedEmail = String(credentials?.email || "").trim().toLowerCase();
-    const matchedUser =
-      displayUsers.find(
-        (user) => String(user.email || "").trim().toLowerCase() === normalizedEmail
-      ) ?? null;
+  async function handleLogin(credentials) {
+    try {
+      const result = await authApi.login(credentials);
+      const nextUser = normalizeAuthUser(result?.user);
 
-    if (!matchedUser) {
-      return {
-        success: false,
-        message: "Não encontramos um cadastro com este e-mail."
-      };
-    }
+      if (!nextUser) {
+        return {
+          success: false,
+          message: "Nao foi possivel iniciar a sessão."
+        };
+      }
 
-    const matchedStatus = normalizeAccessStatus(matchedUser.status ?? matchedUser.accessStatus);
-
-    if (String(matchedUser.password || "") !== String(credentials?.password || "")) {
-      return {
-        success: false,
-        message: "E-mail ou senha inválidos."
-      };
-    }
-
-    if (matchedStatus === "pending") {
-      const nextUser = normalizeAuthUser({
-        ...matchedUser,
-        email: normalizedEmail || matchedUser.email || ""
-      });
       setAuthUser(nextUser);
-      setSelectedUserId("");
-      navigate("/livros");
+      setSelectedUserId(nextUser.status === "pending" ? "" : nextUser.id);
+
+      if (nextUser.status === "pending") {
+        navigate("/cadastro/aguardando-aprovacao", { replace: true });
+        return {
+          success: true,
+          message: result?.message ?? "Seu cadastro está aguardando aprovação do administrador."
+        };
+      }
+
+      navigate(nextUser.role === "admin" ? "/admin/books" : "/livros", { replace: true });
 
       return {
         success: true,
-        message:
-          "Seu cadastro ainda está em aprovação. Você já pode acessar livros e sua conta, mas empréstimos físicos ficam bloqueados até a validação do administrador."
+        message: result?.message ?? "Login realizado com sucesso."
       };
-    }
-
-    if (matchedStatus === "rejected" || matchedStatus === "blocked") {
+    } catch (error) {
       return {
         success: false,
-        message:
-          matchedStatus === "blocked"
-            ? "Seu acesso está bloqueado no momento. Fale com um administrador da FORJA."
-            : "Seu cadastro foi recusado. Fale com um administrador da FORJA."
+        message: error instanceof Error ? error.message : "Nao foi possivel entrar."
       };
     }
-
-    const nextUser = {
-      ...matchedUser,
-      id: matchedUser.id,
-      name: matchedUser.name || buildNameFromEmail(normalizedEmail) || "Leitor FORJA",
-      email: normalizedEmail || matchedUser.email || "",
-      level: normalizeAccessLevel(matchedUser.level),
-      status: matchedStatus,
-      accessStatus: matchedStatus
-    };
-
-    setAuthUser(normalizeAuthUser(nextUser));
-    setSelectedUserId(nextUser.id);
-    navigate("/livros");
-
-    return {
-      success: true,
-      message: "Login realizado com sucesso."
-    };
   }
 
-  function handleLogout() {
+  async function handleLogout() {
+    try {
+      await authApi.logout();
+    } catch {
+      // Ignora falhas de logout local para nao travar a interface.
+    }
+
     setAuthUser(null);
     setSelectedUserId("");
-    navigate("/entrar");
+    navigate("/entrar", { replace: true });
 
     return {
       success: true,
@@ -549,26 +687,53 @@ export function App() {
     };
   }
 
-  function handleRegister(payload) {
-    const result = adminPanel.actions.submitRegistrationRequest(payload);
+  async function handleRegister(payload) {
+    const result = await adminPanel.actions.submitRegistrationRequest(payload);
 
-    if (result.success) {
-      navigate("/cadastro/solicitacao-enviada");
+    if (result?.success) {
+      const nextUser = normalizeAuthUser(result.user ?? null);
+
+      if (nextUser) {
+        setAuthUser(nextUser);
+        setSelectedUserId("");
+      }
+
+      navigate("/cadastro/aguardando-aprovacao", { replace: true });
     }
 
     return result;
   }
 
+  if (authLoading) {
+    return html`
+      <main className="library-app app-shell">
+        <div className="app-main">
+          <div className="app-content">
+            <div className="admin-card auth-loading-card">
+              <strong>Carregando sua sessão...</strong>
+              <p className="admin-helper">Estamos validando seu acesso antes de abrir o sistema.</p>
+            </div>
+          </div>
+        </div>
+      </main>
+    `;
+  }
+
   return html`
     <main className=${`library-app app-shell ${isAuthRoute ? "auth-screen-shell" : ""}`.trim()}>
       ${!isAuthRoute
-        ? html`<${Sidebar} currentUser=${adminPanel.currentUser} isAuthenticated=${isAuthenticated} />`
+        ? html`<${Sidebar}
+            currentUser=${adminPanel.currentUser}
+            isAuthenticated=${isAuthenticated}
+            branding=${brandTheme}
+          />`
         : null}
 
       <div className="app-main">
         <${HeaderBar}
           currentUser=${adminPanel.currentUser}
           isAuthenticated=${isAuthenticated}
+          branding=${brandTheme}
           variant=${isAuthRoute ? "auth" : "default"}
           notifications=${visibleNotifications}
           notificationCount=${unreadNotificationCount}
@@ -857,7 +1022,8 @@ export function App() {
                   onRegister: handleRegister,
                   onModeChange: (nextMode) =>
                     navigate(nextMode === "login" ? "/entrar" : "/cadastrar"),
-                  onClose: () => navigate("/livros")
+                  onClose: () => navigate("/livros"),
+                  branding: brandTheme
                 })}
           />
           <${Route}
@@ -873,7 +1039,8 @@ export function App() {
                   onRegister: handleRegister,
                   onModeChange: (nextMode) =>
                     navigate(nextMode === "register" ? "/cadastrar" : "/entrar"),
-                  onClose: () => navigate("/livros")
+                  onClose: () => navigate("/livros"),
+                  branding: brandTheme
                 })}
           />
           <${Route}
@@ -981,11 +1148,12 @@ export function App() {
             element=${renderAdminPage(
               activeAuthUser,
               adminPanel,
-              React.createElement(AdminSettingsPage, {
-                settings: adminPanel.settings,
-                actions: adminPanel.actions
-              })
-            )}
+            React.createElement(AdminSettingsPage, {
+              settings: adminPanel.settings,
+              actions: adminPanel.actions,
+              branding: brandTheme
+            })
+          )}
           />
           <${Route}
             path="*"
@@ -1000,8 +1168,42 @@ export function App() {
 
 export default App;
 
+function getPreferredColorScheme() {
+  if (typeof globalThis.matchMedia !== "function") {
+    return "light";
+  }
+
+  return globalThis.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function resolveImageWithFallback(src, fallbackSrc) {
+  const fallback = String(fallbackSrc ?? "").trim();
+  const candidate = String(src ?? "").trim();
+
+  if (!candidate) {
+    return Promise.resolve(fallback);
+  }
+
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve(candidate);
+    image.onerror = () => resolve(fallback || candidate);
+    image.src = candidate;
+  });
+}
+
 function renderReaderPage(authUser, page) {
-  if (isRejectedOrBlockedAuthUser(authUser)) {
+  if (!authUser) {
+    return React.createElement(Navigate, { to: "/entrar", replace: true });
+  }
+
+  const status = normalizeAccessStatus(authUser?.status ?? authUser?.accessStatus);
+
+  if (status === "pending") {
+    return React.createElement(Navigate, { to: "/cadastro/aguardando-aprovacao", replace: true });
+  }
+
+  if (status === "rejected" || status === "blocked") {
     return React.createElement(Navigate, { to: "/entrar", replace: true });
   }
 
@@ -1013,7 +1215,13 @@ function renderProtectedPage(authUser, page) {
     return React.createElement(Navigate, { to: "/entrar", replace: true });
   }
 
-  if (isRejectedOrBlockedAuthUser(authUser)) {
+  const status = normalizeAccessStatus(authUser?.status ?? authUser?.accessStatus);
+
+  if (status === "pending") {
+    return React.createElement(Navigate, { to: "/cadastro/aguardando-aprovacao", replace: true });
+  }
+
+  if (status === "rejected" || status === "blocked") {
     return React.createElement(Navigate, { to: "/entrar", replace: true });
   }
 
@@ -1027,6 +1235,10 @@ function renderAdminPage(authUser, adminPanel, page) {
 
   if (isRejectedOrBlockedAuthUser(authUser)) {
     return React.createElement(Navigate, { to: "/entrar", replace: true });
+  }
+
+  if (isPendingAuthUser(authUser)) {
+    return React.createElement(Navigate, { to: "/cadastro/aguardando-aprovacao", replace: true });
   }
 
   if (!isApprovedAuthUser(authUser) || authUser.role !== "admin") {
@@ -1051,7 +1263,7 @@ function PendingApprovalPage({ onLogout }) {
               <h1>Seu cadastro está aguardando aprovação do administrador.</h1>
               <p>
                 Assim que um admin liberar o acesso, você poderá entrar normalmente e usar a
-                biblioteca interna.
+                a plataforma Lumiar Flow.
               </p>
               <button type="button" className="auth-submit" onClick=${onLogout}>
                 Voltar para o login
@@ -1062,65 +1274,6 @@ function PendingApprovalPage({ onLogout }) {
       </section>
     <//>
   `;
-}
-
-function readAuthSession() {
-  try {
-    const raw = globalThis.localStorage?.getItem(AUTH_STORAGE_KEY);
-    if (!raw) {
-      return null;
-    }
-
-    const parsed = JSON.parse(raw);
-    const normalized = normalizeAuthUser(parsed);
-
-    if (!normalized?.id || !normalized?.email) {
-      return null;
-    }
-
-    return normalized;
-  } catch {
-    return null;
-  }
-}
-
-function writeAuthSession(authUser) {
-  try {
-    if (!globalThis.localStorage) {
-      return;
-    }
-
-    if (authUser) {
-      const sessionSnapshot = {
-        id: authUser.id,
-        email: authUser.email,
-        name: authUser.name,
-        role: normalizeAuthRole(authUser.role),
-        level: normalizeAccessLevel(authUser.level),
-        status: normalizeAccessStatus(authUser.status ?? authUser.accessStatus)
-      };
-
-      globalThis.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(sessionSnapshot));
-    } else {
-      globalThis.localStorage.removeItem(AUTH_STORAGE_KEY);
-    }
-  } catch {
-    // noop
-  }
-}
-
-function buildNameFromEmail(email) {
-  if (!email) {
-    return "";
-  }
-
-  const localPart = email.split("@")[0] || "";
-
-  return localPart
-    .split(/[._-]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
 }
 
 function getApiBaseUrl() {

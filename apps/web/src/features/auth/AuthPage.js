@@ -2,6 +2,7 @@
 import htm from "htm";
 import { PageLayout } from "../../components/PageLayout.js";
 import { FeedbackMessage } from "../../components/FeedbackMessage.js";
+import { BrandImage } from "../../components/BrandImage.js";
 
 const html = htm.bind(React.createElement);
 
@@ -21,21 +22,31 @@ const REGISTER_INITIAL_STATE = {
   password: ""
 };
 
-export function AuthPage({ mode, onModeChange, onClose, onLogin, onRegister }) {
+export function AuthPage({
+  mode,
+  onModeChange,
+  onClose,
+  onLogin,
+  onRegister,
+  branding = null
+}) {
   const [loginForm, setLoginForm] = useState(LOGIN_INITIAL_STATE);
   const [registerForm, setRegisterForm] = useState(REGISTER_INITIAL_STATE);
   const [feedback, setFeedback] = useState(null);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showRegisterPassword, setShowRegisterPassword] = useState(false);
   const isLoginMode = mode === "login";
+  const logoSrc = branding?.logoSrc ?? "/storage/branding/logo-lumiar.png";
+  const systemName = branding?.systemName ?? "Lumiar Flow";
+  const slogan = branding?.slogan ?? "Conhecimento em movimento.";
 
   useEffect(() => {
     setFeedback(null);
   }, [mode]);
 
-  function handleLoginSubmit(event) {
+  async function handleLoginSubmit(event) {
     event.preventDefault();
-    const result = onLogin?.(loginForm);
+    const result = await Promise.resolve(onLogin?.(loginForm));
     if (result?.message) {
       setFeedback({
         tone: result.success ? "success" : "error",
@@ -45,9 +56,9 @@ export function AuthPage({ mode, onModeChange, onClose, onLogin, onRegister }) {
     }
   }
 
-  function handleRegisterSubmit(event) {
+  async function handleRegisterSubmit(event) {
     event.preventDefault();
-    const result = onRegister?.(registerForm);
+    const result = await Promise.resolve(onRegister?.(registerForm));
     if (result?.message) {
       setFeedback({
         tone: result.success ? "success" : "error",
@@ -60,7 +71,7 @@ export function AuthPage({ mode, onModeChange, onClose, onLogin, onRegister }) {
   const asideTitle =
     isLoginMode
       ? "Entre para continuar sua jornada de leitura."
-      : "Crie seu acesso para evoluir com a biblioteca FORJA.";
+      : "Crie seu acesso para evoluir com a biblioteca Lumiar Flow.";
   const asideDescription =
     isLoginMode
       ? "Use o seu e-mail corporativo para acessar livros, progresso e recomendações da equipe."
@@ -99,7 +110,7 @@ export function AuthPage({ mode, onModeChange, onClose, onLogin, onRegister }) {
           ${!isLoginMode
             ? html`
                 <aside className=${`auth-aside auth-aside--${mode}`}>
-                  <span className="auth-tag">FORJA</span>
+                  <span className="auth-tag">LUMIAR FLOW</span>
                   <h1>${asideTitle}</h1>
                   <p>${asideDescription}</p>
 
@@ -119,10 +130,14 @@ export function AuthPage({ mode, onModeChange, onClose, onLogin, onRegister }) {
 
           <div className=${`auth-card auth-card--${mode}`}>
             <div className="auth-card-brand">
-              <img src="/forja-icon.png" alt="Forja" />
+              <${BrandImage}
+                src=${logoSrc}
+                fallbackSrc=${branding?.logoFallbackSrc ?? branding?.logoPrimarySrc ?? logoSrc}
+                alt=${systemName}
+              />
               <div>
-                <strong>FORJA</strong>
-                <span>Biblioteca interna</span>
+                <strong>${systemName}</strong>
+                <span>${slogan}</span>
               </div>
             </div>
 

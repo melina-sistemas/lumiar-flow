@@ -58,8 +58,8 @@ export function AdminLoansPage({ loans, books, users, actions }) {
 
         for (const loan of pending) {
           const approval = approvalData[loan.id] ?? {
-            responsible: loan.responsible || "Equipe FORJA",
-            location: loan.location || "Biblioteca FORJA",
+            responsible: loan.responsible || "Equipe Lumiar Flow",
+            location: loan.location || "Biblioteca Lumiar Flow",
             dueAt:
               loan.dueAt?.slice?.(0, 10) ||
               new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)

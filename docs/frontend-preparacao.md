@@ -19,7 +19,7 @@ Quando formos criar a interface:
 
 - a tela de emprestimo vai chamar `createLoan`
 - a tela de devolucao vai chamar `returnLoan`
-- os tipos de entrada e saida ja estao prontos via `@biblioteca/shared`
+- os tipos de entrada e saida ja estao prontos via `@lumiar-flow/shared`
 
 ## Fluxo simples da tela de emprestimo
 

@@ -7,8 +7,11 @@ const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "../../../..");
 
 export function loadEnvFile() {
-  const envPath = path.join(projectRoot, ".env");
+  loadEnvFileAtPath(path.join(projectRoot, ".env.local"));
+  loadEnvFileAtPath(path.join(projectRoot, ".env"));
+}
 
+function loadEnvFileAtPath(envPath) {
   if (!existsSync(envPath)) {
     return;
   }

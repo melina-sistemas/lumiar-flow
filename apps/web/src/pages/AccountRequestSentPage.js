@@ -11,7 +11,7 @@ export function AccountRequestSentPage() {
       <section className="auth-page">
         <div className="auth-shell auth-shell--login">
           <aside className="auth-aside auth-aside--login">
-            <span className="auth-tag">FORJA</span>
+            <span className="auth-tag">LUMIAR FLOW</span>
             <h1>Sua solicitação foi enviada.</h1>
             <p>
               Agora um administrador da plataforma precisa analisar e liberar o seu acesso.

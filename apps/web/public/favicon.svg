@@ -1,0 +1,21 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Lumiar Flow">
+  <defs>
+    <linearGradient id="bg" x1="10" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F172A" />
+      <stop offset="1" stop-color="#1D4B7A" />
+    </linearGradient>
+    <linearGradient id="gold" x1="18" y1="16" x2="46" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8C33A" />
+      <stop offset="1" stop-color="#FFE6A1" />
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="16" fill="url(#bg)" />
+  <circle cx="32" cy="22" r="10" fill="url(#gold)" opacity="0.95" />
+  <path d="M32 13L37.5 23H26.5L32 13Z" fill="#FFF8E6" />
+  <path d="M28 24H36L39 45H25L28 24Z" fill="#FFF8E6" />
+  <path d="M22 44C24.5 39.5 28 37 32 37C36 37 39.5 39.5 42 44" stroke="#F8C33A" stroke-width="3.5" stroke-linecap="round" />
+  <path d="M18 27L10 27" stroke="#F8C33A" stroke-width="3" stroke-linecap="round" />
+  <path d="M54 27L46 27" stroke="#F8C33A" stroke-width="3" stroke-linecap="round" />
+  <path d="M24 31H40" stroke="#0F172A" stroke-width="3.5" stroke-linecap="round" />
+  <path d="M24 36H40" stroke="#0F172A" stroke-width="3.5" stroke-linecap="round" />
+</svg>

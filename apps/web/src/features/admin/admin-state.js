@@ -1,20 +1,22 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createAdminApiClient } from "../../services/admin-api.js";
+import { DEFAULT_BRAND_SETTINGS } from "../branding/brand-theme.js";
 
-const STORAGE_KEY = "forja-admin-panel-v1";
+const STORAGE_KEY = "lumiar-flow-admin-panel-v1";
 const BOOTSTRAP_USERS = [
   {
     id: "bootstrap-admin-melina",
     name: "Melina Abreu",
     email: "melina@powercrm.com.br",
     cpf: "123.456.789-10",
-    password: "Eduarda*9514",
     role: "admin",
     level: "gold",
     accessStatus: "approved",
+    status: "approved",
     createdByAdmin: true,
     mustChangePassword: false,
-    readingList: []
+    readingList: [],
+    tokenVersion: 0
   }
 ];
 
@@ -41,8 +43,7 @@ const DEFAULT_GAMIFICATION = {
 };
 
 const DEFAULT_SETTINGS = {
-  systemName: "FORJA",
-  primaryColor: "#0693e3",
+  ...DEFAULT_BRAND_SETTINGS,
   loanLimit: 1,
   globalMaxDays: 30,
   reservationWindowHours: 42
@@ -143,6 +144,117 @@ const stabilizeAdminState = (rawState = {}) => {
   const finalWaitlists = promoted.waitlists;
   const finalNotifications = promoted.notifications;
 
+  async function submitRegistrationRequestSecure(input) {
+    const normalizedEmail = String(input.email || "").trim().toLowerCase();
+
+    if (
+      state.users.some((user) => String(user.email || "").trim().toLowerCase() === normalizedEmail)
+    ) {
+      return {
+        success: false,
+        message: "Ja existe um cadastro com este e-mail."
+      };
+    }
+
+    if (!adminApi || typeof adminApi.registerUser !== "function") {
+      return {
+        success: false,
+        message: "Nao foi possivel conectar ao servidor de autenticacao."
+      };
+    }
+
+    try {
+      const result = await adminApi.registerUser(input);
+      const nextUser = normalizeAdminUser(result.user ?? {});
+
+      setState((current) =>
+        stabilizeAdminState({
+          ...current,
+          users: upsertUserIntoState(current.users, nextUser)
+        })
+      );
+
+      return {
+        success: true,
+        message:
+          result.message ??
+          "Solicitação enviada com sucesso. Aguarde a aprovação do administrador.",
+        user: nextUser
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Nao foi possivel enviar sua solicitacao."
+      };
+    }
+  }
+
+  async function createManagedUserSecure(input) {
+    if (!adminApi || typeof adminApi.createManagedUser !== "function") {
+      return {
+        success: false,
+        message: "Nao foi possivel conectar ao servidor de autenticacao."
+      };
+    }
+
+    try {
+      const result = await adminApi.createManagedUser(input);
+      const nextUser = normalizeAdminUser(result.user ?? {});
+
+      setState((current) =>
+        stabilizeAdminState({
+          ...current,
+          users: upsertUserIntoState(current.users, nextUser)
+        })
+      );
+
+      return {
+        success: true,
+        message:
+          result.message ??
+          "Usuario criado com sucesso. A senha inicial foi registrada no servidor.",
+        user: nextUser
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Nao foi possivel cadastrar o usuario."
+      };
+    }
+  }
+
+  async function changePasswordSecure(userId, newPassword) {
+    if (!adminApi || typeof adminApi.changePassword !== "function") {
+      return {
+        success: false,
+        message: "Nao foi possivel conectar ao servidor de autenticacao."
+      };
+    }
+
+    try {
+      const result = await adminApi.changePassword({ userId, newPassword });
+      const nextUser = normalizeAdminUser(result.user ?? {});
+
+      setState((current) =>
+        stabilizeAdminState({
+          ...current,
+          users: upsertUserIntoState(current.users, nextUser)
+        })
+      );
+
+      return {
+        success: true,
+        message: result.message ?? "Senha atualizada com sucesso.",
+        user: nextUser
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Nao foi possivel atualizar a senha."
+      };
+    }
+  }
+
   return {
     ...state,
     books: finalBooks,
@@ -187,6 +299,14 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
       return undefined;
     }
 
+    const canSyncCurrentUser =
+      currentUser?.role === "admin" &&
+      normalizeUserAccessStatus(currentUser?.status ?? currentUser?.accessStatus) === "approved";
+
+    if (!canSyncCurrentUser) {
+      return undefined;
+    }
+
     if (!syncReadyRef.current) {
       return undefined;
     }
@@ -213,7 +333,7 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
     return () => {
       globalThis.clearTimeout(timer);
     };
-  }, [adminApi, state]);
+  }, [adminApi, currentUser, state]);
 
   useEffect(() => {
     const timer = globalThis.setInterval(() => {
@@ -595,8 +715,8 @@ function assignBookToUser(userId, bookId) {
         requestedAt: now,
         type: book.type,
         status: "BORROWED",
-        responsible: "Equipe FORJA",
-        location: "Biblioteca FORJA",
+        responsible: "Equipe Lumiar Flow",
+        location: "Biblioteca Lumiar Flow",
         dueAt: addDays(now, book.type === "digital" ? 180 : current.settings.globalMaxDays),
         borrowedAt: now,
         returnedAt: "",
@@ -1287,13 +1407,13 @@ function assignBookToUser(userId, bookId) {
       removeBook,
       importBooks,
       updateUser,
-      submitRegistrationRequest,
-      createManagedUser,
+      submitRegistrationRequest: submitRegistrationRequestSecure,
+      createManagedUser: createManagedUserSecure,
       approveUser,
       rejectUser,
       blockUser,
       removeUser,
-      changePassword,
+      changePassword: changePasswordSecure,
       toggleReadingList,
       assignBookToUser,
       updateRules,
@@ -1356,7 +1476,10 @@ function createAdminState(rawState = {}) {
     notifications: Array.isArray(rawState.notifications) ? rawState.notifications : [],
     rules: rawState.rules ?? DEFAULT_RULES,
     gamification: rawState.gamification ?? DEFAULT_GAMIFICATION,
-    settings: rawState.settings ?? DEFAULT_SETTINGS
+    settings: {
+      ...DEFAULT_SETTINGS,
+      ...(rawState.settings ?? {})
+    }
   };
 }
 
@@ -1399,6 +1522,25 @@ function mergeUsers(seedUsers, currentUsers, forcedUsers = []) {
   }
 
   return Array.from(map.values());
+}
+
+function upsertUserIntoState(users, user) {
+  const nextUsers = Array.isArray(users) ? users.slice() : [];
+  const index = nextUsers.findIndex(
+    (entry) =>
+      String(entry.id) === String(user.id) ||
+      String(entry.email ?? "").trim().toLowerCase() === String(user.email ?? "").trim().toLowerCase()
+  );
+
+  if (index >= 0) {
+    nextUsers[index] = normalizeAdminUser({
+      ...nextUsers[index],
+      ...user
+    });
+    return nextUsers;
+  }
+
+  return [normalizeAdminUser(user), ...nextUsers];
 }
 
 function findUserKeyByEmail(map, email) {
@@ -1503,7 +1645,17 @@ function normalizeAdminUser(user) {
     department: user.department ?? "",
     phone: user.phone ?? "",
     birthDate: user.birthDate ?? "",
-    password: user.password ?? (cpf ? String(cpf) : ""),
+    passwordHash: user.passwordHash ?? "",
+    passwordSalt: user.passwordSalt ?? "",
+    tokenVersion: Number(user.tokenVersion ?? 0),
+    lastLoginAt: user.lastLoginAt ?? null,
+    approvedAt: user.approvedAt ?? null,
+    approvedBy: user.approvedBy ?? null,
+    rejectedAt: user.rejectedAt ?? null,
+    rejectedBy: user.rejectedBy ?? null,
+    rejectionReason: user.rejectionReason ?? "",
+    createdAt: user.createdAt ?? null,
+    updatedAt: user.updatedAt ?? null,
     createdByAdmin: Boolean(user.createdByAdmin),
     mustChangePassword: Boolean(user.mustChangePassword),
     readingList: Array.isArray(user.readingList) ? user.readingList : [],
@@ -1917,8 +2069,8 @@ function fromCatalogLoan(loan, books) {
     requestedAt: loan.borrowedAt,
     type: book?.type ?? "physical",
     status: loan.status === "returned" ? "RETURNED" : "BORROWED",
-    responsible: "Equipe FORJA",
-    location: "Biblioteca FORJA",
+    responsible: "Equipe Lumiar Flow",
+    location: "Biblioteca Lumiar Flow",
     dueAt: loan.dueAt,
     borrowedAt: loan.borrowedAt,
     returnedAt: loan.returnedAt ?? "",

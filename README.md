@@ -1,30 +1,42 @@
-<<<<<<< HEAD
-# Sistema Interno de Biblioteca
+# Lumiar Flow
 
-Estrutura inicial de um sistema web interno para a equipe gerenciar livros, emprestimos e historico de uso.
+Conhecimento em movimento.
 
-## Estrutura
+Plataforma de livros e gerenciamento de leitura externa.
 
-```text
-apps/
-  api/        Backend, regras de negocio e APIs
-  web/        Interface interna usada pela equipe
-packages/
-  shared/     Tipos, constantes e contratos compartilhados
-docs/         Decisoes de arquitetura e proximos passos
-```
+## Enderecos oficiais
 
-## Objetivo desta primeira etapa
+- Site/app: `https://app.lumiarflow.com.br`
+- API: `https://api.lumiarflow.com.br`
+- Dominio institucional: `https://lumiarflow.com.br`
 
-Nesta etapa, organizamos a base do projeto para crescer sem bagunca. Ainda nao ha dependencias instaladas nem aplicacao executavel; o foco aqui e separar responsabilidades desde o inicio.
+## Portas locais
 
-## Proximos passos sugeridos
+- Frontend: `http://localhost:3000`
+- API: `http://localhost:3001`
 
-1. Definir as entidades principais: livro, usuario interno, emprestimo e reserva.
-2. Escolher o stack final de cada app e instalar dependencias.
-3. Criar a primeira tela: catalogo de livros.
-4. Criar a primeira API: listagem e cadastro de livros.
+## Execucao local
 
-=======
-# forja-system
->>>>>>> 186b8c1e3e1f5803741f4014b6b693c8b8633409
+1. Copie [.env.example](/C:/Users/melina.abreu/Documents/Codex/2026-04-20-quero-criar-um-sistema-web-interno/.env.example) para `.env`.
+2. Preencha as variaveis de ambiente.
+3. Rode os servicos do projeto.
+
+## Estrutura principal
+
+- [apps/web](/C:/Users/melina.abreu/Documents/Codex/2026-04-20-quero-criar-um-sistema-web-interno/apps/web)
+- [apps/api](/C:/Users/melina.abreu/Documents/Codex/2026-04-20-quero-criar-um-sistema-web-interno/apps/api)
+- [docs](/C:/Users/melina.abreu/Documents/Codex/2026-04-20-quero-criar-um-sistema-web-interno/docs)
+- [supabase/schema.sql](/C:/Users/melina.abreu/Documents/Codex/2026-04-20-quero-criar-um-sistema-web-interno/supabase/schema.sql)
+
+## Fluxo de acesso
+
+- Novos usuarios entram como `pending` e `role=user`
+- Apenas administradores aprovados podem acessar a area administrativa
+- Usuarios pendentes veem somente a tela de aguardando aprovacao
+
+## Deploy
+
+- Leia [docs/deploy-checklist.md](/C:/Users/melina.abreu/Documents/Codex/2026-04-20-quero-criar-um-sistema-web-interno/docs/deploy-checklist.md)
+- Leia [docs/production-setup.md](/C:/Users/melina.abreu/Documents/Codex/2026-04-20-quero-criar-um-sistema-web-interno/docs/production-setup.md)
+- Leia [docs/publication-checklist.md](/C:/Users/melina.abreu/Documents/Codex/2026-04-20-quero-criar-um-sistema-web-interno/docs/publication-checklist.md)
+- Leia [docs/mvp-gap-report.md](/C:/Users/melina.abreu/Documents/Codex/2026-04-20-quero-criar-um-sistema-web-interno/docs/mvp-gap-report.md)

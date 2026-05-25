@@ -9,10 +9,9 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "@biblioteca/shared/*": [
+      "@lumiar-flow/shared/*": [
         "packages/shared/src/*"
       ]
     }
   }
 }
-

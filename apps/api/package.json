@@ -1,5 +1,5 @@
 {
-  "name": "@biblioteca/api",
+  "name": "@lumiar-flow/api",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -8,5 +8,8 @@
     "dev": "node ./src/server.js",
     "build": "node -e \"process.exit(0)\"",
     "start": "node ./src/server.js"
+  },
+  "dependencies": {
+    "@sentry/node": "^10.53.1"
   }
 }

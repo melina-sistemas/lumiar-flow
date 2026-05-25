@@ -32,6 +32,7 @@ export function createLoanApiClient(baseUrl) {
 async function request(url, init) {
   const response = await fetch(url, {
     ...init,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...(init.headers ?? {})

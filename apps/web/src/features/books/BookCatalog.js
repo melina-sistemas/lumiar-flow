@@ -39,7 +39,7 @@ function isRenderableCoverUrl(coverUrl) {
     coverUrl.startsWith("../") ||
     coverUrl.startsWith("http://localhost") ||
     coverUrl.startsWith("https://localhost") ||
-    coverUrl.startsWith("https://forja-system")
+    coverUrl.startsWith("https://lumiarflow")
   );
 }
 
@@ -1125,7 +1125,7 @@ function readStoredReaderPage(bookId) {
     return 1;
   }
 
-  const raw = globalThis.localStorage.getItem(`forja-reader-page:${bookId}`);
+  const raw = globalThis.localStorage.getItem(`lumiar-flow-reader-page:${bookId}`);
   const page = Number(raw);
 
   return Number.isFinite(page) && page > 0 ? page : 1;
@@ -1137,7 +1137,7 @@ function writeStoredReaderPage(bookId, page) {
   }
 
   try {
-    globalThis.localStorage.setItem(`forja-reader-page:${bookId}`, String(page));
+    globalThis.localStorage.setItem(`lumiar-flow-reader-page:${bookId}`, String(page));
   } catch (error) {
     void error;
   }

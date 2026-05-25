@@ -1,6 +1,7 @@
 import React from "react";
 import htm from "htm";
 import { NavLink, useLocation } from "react-router-dom";
+import { BrandImage } from "./BrandImage.js";
 
 const html = htm.bind(React.createElement);
 
@@ -22,10 +23,13 @@ const ADMIN_NAV = [
   { label: "Personalização", to: "/admin/settings", icon: "settings" }
 ];
 
-export function Sidebar({ currentUser, isAuthenticated }) {
+export function Sidebar({ currentUser, isAuthenticated, branding = null }) {
   const location = useLocation();
   const isAdminArea = location.pathname.startsWith("/admin");
   const isAdminUser = currentUser?.role === "admin";
+  const logoSrc = branding?.logoCompactSrc ?? branding?.logoSrc ?? "/storage/branding/icon-vertical-gold.png";
+  const systemName = branding?.systemName ?? "Lumiar Flow";
+  const slogan = branding?.slogan ?? "Conhecimento em movimento.";
   const visibleMainNav = isAuthenticated
     ? MAIN_NAV.filter((item) =>
         ["/usuarios", "/desempenho", "/relatorios"].includes(item.to) ? isAdminUser : true
@@ -35,10 +39,15 @@ export function Sidebar({ currentUser, isAuthenticated }) {
   return html`
     <aside className="app-sidebar">
       <div className="sidebar-brand">
-        <img className="sidebar-logo" src="/forja-icon.png" alt="Forja" />
+        <${BrandImage}
+          className="sidebar-logo"
+          src=${logoSrc}
+          fallbackSrc=${branding?.logoFallbackSrc ?? branding?.logoPrimarySrc ?? logoSrc}
+          alt=${systemName}
+        />
         <div className="sidebar-brand-copy">
-          <strong>FORJA</strong>
-          <span>Biblioteca interna</span>
+          <strong>${systemName}</strong>
+          <span>${slogan}</span>
         </div>
       </div>
 

@@ -5,8 +5,8 @@ import {
   calculateReadingScore,
   getUserLevelFromScore,
   validateReturnAnswers
-} from "@biblioteca/shared";
-import type { Loan, LoanReturn, ScoreEntry } from "@biblioteca/shared";
+} from "@lumiar-flow/shared";
+import type { Loan, LoanReturn, ScoreEntry } from "@lumiar-flow/shared";
 import type { LoanRepository } from "../loan-repository";
 import {
   defaultUseCaseContext,

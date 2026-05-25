@@ -4,7 +4,7 @@ import type {
   Loan,
   LoanReturn,
   TeamUser
-} from "@biblioteca/shared";
+} from "@lumiar-flow/shared";
 
 export interface LibrarySnapshot {
   users: TeamUser[];

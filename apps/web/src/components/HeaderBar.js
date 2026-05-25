@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import htm from "htm";
 import { Link, useLocation } from "react-router-dom";
+import { BrandImage } from "./BrandImage.js";
 
 const html = htm.bind(React.createElement);
 
@@ -10,13 +11,14 @@ const ROUTE_COPY = [
   { match: "/usuarios", title: "Usuários", hint: "Acompanhe perfis, históricos e níveis." },
   { match: "/desempenho", title: "Desempenho", hint: "Veja score, ranking e evolução." },
   { match: "/relatorios", title: "Relatórios", hint: "Analise dados de uso e qualidade." },
-  { match: "/entrar", title: "Acesso", hint: "Entre na sua conta FORJA." },
+  { match: "/entrar", title: "Acesso", hint: "Entre na sua conta Lumiar Flow." },
   { match: "/cadastrar", title: "Cadastro", hint: "Crie um novo acesso." }
 ];
 
 export function HeaderBar({
   currentUser,
   isAuthenticated,
+  branding = null,
   variant = "default",
   notifications = [],
   notificationCount = 0,
@@ -33,6 +35,8 @@ export function HeaderBar({
   const location = useLocation();
   const copy = ROUTE_COPY.find((item) => location.pathname.startsWith(item.match)) ?? ROUTE_COPY[1];
   const initials = getInitials(currentUser?.name || "Admin");
+  const logoSrc = branding?.iconSrc ?? branding?.logoSrc ?? "/storage/branding/icon-circle-dark.png";
+  const systemName = branding?.systemName ?? "Lumiar Flow";
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -83,8 +87,13 @@ export function HeaderBar({
     return html`
       <header className="app-header auth-topbar">
         <${Link} to="/livros" className="auth-topbar-brand">
-          <img className="auth-topbar-logo" src="/forja-icon.png" alt="Forja" />
-          <strong>FORJA</strong>
+          <${BrandImage}
+            className="auth-topbar-logo"
+            src=${logoSrc}
+            fallbackSrc=${branding?.logoFallbackSrc ?? branding?.logoPrimarySrc ?? logoSrc}
+            alt=${systemName}
+          />
+          <strong>${systemName}</strong>
         </${Link}>
       </header>
     `;
