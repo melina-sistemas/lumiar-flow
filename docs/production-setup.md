@@ -52,6 +52,12 @@ Se o frontend for publicado separado, configure:
 - `WEB_ORIGIN=https://app.lumiarflow.com.br`
 - `VITE_SENTRY_DSN=https://...`
 
+Se estiver usando a Vercel como staging temporario antes do DNS final, adicione tambem:
+
+- `WEB_ORIGIN_ALLOWLIST=https://lumiar-flow-gvivuflf-melina-sistemas-projects.vercel.app`
+- `AUTH_COOKIE_SAMESITE=none`
+- `AUTH_COOKIE_SECURE=true`
+
 ## Railway
 
 Na API, configure:
@@ -61,6 +67,7 @@ Na API, configure:
 - `AUTH_COOKIE_SECURE=true`
 - `AUTH_COOKIE_SAMESITE=lax` se frontend e API estiverem sob `lumiarflow.com.br`
 - `AUTH_COOKIE_SAMESITE=none` apenas se houver dominios realmente diferentes
+- `WEB_ORIGIN_ALLOWLIST=https://lumiar-flow-gvivuflf-melina-sistemas-projects.vercel.app` enquanto o staging estiver na Vercel
 - `SENTRY_DSN=https://...`
 - `SENTRY_ENVIRONMENT=production`
 - `SENTRY_RELEASE` com o hash/versao da entrega

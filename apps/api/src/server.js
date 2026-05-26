@@ -40,6 +40,7 @@ export function createApiServer(repository, adminStateStore) {
   return createServer(async (request, response) => {
     const url = new URL(request.url ?? "/", "http://localhost");
     const pathname = normalizeRequestPath(url.pathname);
+    response.__corsOrigin = resolveCorsOrigin(request.headers.origin ?? request.headers.Origin ?? "");
 
     try {
       if (request.method === "OPTIONS") {
@@ -1066,7 +1067,8 @@ function mapErrorToStatus(code) {
 }
 
 function sendJson(response, statusCode, payload) {
-  const allowedOrigin = process.env.WEB_ORIGIN ?? "http://localhost:3000";
+  const allowedOrigin =
+    response.__corsOrigin ?? process.env.WEB_ORIGIN ?? "http://localhost:3000";
 
   response.writeHead(statusCode, {
     "Content-Type": "application/json; charset=utf-8",
@@ -1083,6 +1085,46 @@ function sendJson(response, statusCode, payload) {
   }
 
   response.end(JSON.stringify(payload, null, 2));
+}
+
+function resolveCorsOrigin(requestOrigin) {
+  const fallbackOrigin = process.env.WEB_ORIGIN ?? "http://localhost:3000";
+  const normalizedRequestOrigin = String(requestOrigin ?? "").trim();
+
+  if (!normalizedRequestOrigin) {
+    return fallbackOrigin;
+  }
+
+  const allowedOrigins = new Set([
+    fallbackOrigin,
+    ...parseOriginList(process.env.WEB_ORIGIN_ALLOWLIST)
+  ]);
+
+  if (allowedOrigins.has(normalizedRequestOrigin)) {
+    return normalizedRequestOrigin;
+  }
+
+  if (isAllowedVercelPreviewOrigin(normalizedRequestOrigin)) {
+    return normalizedRequestOrigin;
+  }
+
+  return fallbackOrigin;
+}
+
+function parseOriginList(value) {
+  return String(value ?? "")
+    .split(/[\s,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function isAllowedVercelPreviewOrigin(origin) {
+  try {
+    const parsed = new URL(origin);
+    return parsed.protocol === "https:" && parsed.hostname.endsWith(".vercel.app");
+  } catch {
+    return false;
+  }
 }
 
 function normalizeAdminState(state) {

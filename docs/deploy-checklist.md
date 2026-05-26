@@ -7,6 +7,7 @@
 - [ ] frontend rodando em `3000`
 - [ ] `VITE_API_BASE_URL` apontando para a API correta
 - [ ] `WEB_ORIGIN` configurado com `https://app.lumiarflow.com.br`
+- [ ] `WEB_ORIGIN_ALLOWLIST` inclui o preview atual da Vercel enquanto o DNS nao propaga
 - [ ] `AUTH_JWT_SECRET` forte e unico
 - [ ] `AUTH_COOKIE_SECURE=true` em producao
 - [ ] `AUTH_COOKIE_SAMESITE=lax` se `app.` e `api.` estiverem sob `lumiarflow.com.br`
