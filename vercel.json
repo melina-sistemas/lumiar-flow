@@ -3,6 +3,14 @@
   "outputDirectory": "apps/web/dist",
   "rewrites": [
     {
+      "source": "/api",
+      "destination": "https://lumiar-flowapi-production.up.railway.app"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "https://lumiar-flowapi-production.up.railway.app/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

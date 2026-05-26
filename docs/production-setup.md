@@ -58,6 +58,8 @@ Se estiver usando a Vercel como staging temporario antes do DNS final, adicione 
 - `AUTH_COOKIE_SAMESITE=none`
 - `AUTH_COOKIE_SECURE=true`
 
+O frontend em preview da Vercel usa `/api` por proxy no proprio dominio, entao o login nao depende de CORS durante o staging.
+
 ## Railway
 
 Na API, configure:

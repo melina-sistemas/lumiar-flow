@@ -1278,7 +1278,17 @@ function PendingApprovalPage({ onLogout }) {
 }
 
 function getApiBaseUrl() {
-  const overrideBaseUrl = readApiBaseUrlOverride();
+  const queryOverrideBaseUrl = readApiBaseUrlQueryOverride();
+  if (queryOverrideBaseUrl) {
+    return queryOverrideBaseUrl;
+  }
+
+  const previewBaseUrl = getVercelPreviewApiBaseUrl();
+  if (previewBaseUrl) {
+    return previewBaseUrl;
+  }
+
+  const overrideBaseUrl = readApiBaseUrlStoredOverride();
   if (overrideBaseUrl) {
     return overrideBaseUrl;
   }
@@ -1292,7 +1302,25 @@ function getApiBaseUrl() {
   return "/api";
 }
 
-function readApiBaseUrlOverride() {
+function getVercelPreviewApiBaseUrl() {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  try {
+    const currentUrl = new URL(window.location.href);
+
+    if (currentUrl.protocol === "https:" && currentUrl.hostname.endsWith(".vercel.app")) {
+      return "/api";
+    }
+  } catch {
+    return "";
+  }
+
+  return "";
+}
+
+function readApiBaseUrlQueryOverride() {
   if (typeof window === "undefined") {
     return "";
   }
@@ -1305,10 +1333,22 @@ function readApiBaseUrlOverride() {
       window.localStorage?.setItem(API_BASE_URL_OVERRIDE_KEY, queryOverride);
       return queryOverride;
     }
+  } catch {
+    return "";
+  }
 
+  return "";
+}
+
+function readApiBaseUrlStoredOverride() {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  try {
     return String(window.localStorage?.getItem(API_BASE_URL_OVERRIDE_KEY) ?? "").trim();
   } catch {
-    return String(window.localStorage?.getItem(API_BASE_URL_OVERRIDE_KEY) ?? "").trim();
+    return "";
   }
 }
 
