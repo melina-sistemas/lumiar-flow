@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { getSupabaseConfig } from "../config/supabase-config.js";
 
-const ADMIN_STATE_ROW_ID = "panel";
+const ADMIN_STATE_ROW_KEY = "panel";
 const ADMIN_STATE_FILE = new URL("./admin-state.json", import.meta.url);
 
 export function createAdminStateStore() {
@@ -55,9 +55,12 @@ class SupabaseAdminStateStore {
   }
 
   async read() {
-    const rows = await this.request(`/rest/v1/admin_state?id=eq.${ADMIN_STATE_ROW_ID}&select=payload,updated_at`, {
-      method: "GET"
-    });
+    const rows = await this.request(
+      `/rest/v1/admin_state?key=eq.${encodeURIComponent(ADMIN_STATE_ROW_KEY)}&select=payload,updated_at`,
+      {
+        method: "GET"
+      }
+    );
     const row = rows[0];
 
     if (!row) {
@@ -72,12 +75,12 @@ class SupabaseAdminStateStore {
 
   async write(state) {
     const record = {
-      id: ADMIN_STATE_ROW_ID,
+      key: ADMIN_STATE_ROW_KEY,
       payload: normalizeState(state),
       updated_at: new Date().toISOString()
     };
 
-    await this.request("/rest/v1/admin_state", {
+    await this.request("/rest/v1/admin_state?on_conflict=key", {
       method: "POST",
       headers: {
         Prefer: "resolution=merge-duplicates,return=representation"
