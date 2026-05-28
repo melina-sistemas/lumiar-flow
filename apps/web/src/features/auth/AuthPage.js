@@ -46,7 +46,12 @@ export function AuthPage({
 
   async function handleLoginSubmit(event) {
     event.preventDefault();
-    const result = await Promise.resolve(onLogin?.(loginForm));
+    const formData = new FormData(event.currentTarget);
+    const payload = {
+      email: String(formData.get("email") ?? loginForm.email ?? "").trim(),
+      password: String(formData.get("password") ?? loginForm.password ?? "").trim()
+    };
+    const result = await Promise.resolve(onLogin?.(payload));
     if (result?.message) {
       setFeedback({
         tone: result.success ? "success" : "error",
@@ -58,7 +63,18 @@ export function AuthPage({
 
   async function handleRegisterSubmit(event) {
     event.preventDefault();
-    const result = await Promise.resolve(onRegister?.(registerForm));
+    const formData = new FormData(event.currentTarget);
+    const payload = {
+      fullName: String(formData.get("fullName") ?? registerForm.fullName ?? "").trim(),
+      email: String(formData.get("email") ?? registerForm.email ?? "").trim(),
+      company: String(formData.get("company") ?? registerForm.company ?? "").trim(),
+      department: String(formData.get("department") ?? registerForm.department ?? "").trim(),
+      cpf: String(formData.get("cpf") ?? registerForm.cpf ?? "").trim(),
+      phone: String(formData.get("phone") ?? registerForm.phone ?? "").trim(),
+      birthDate: String(formData.get("birthDate") ?? registerForm.birthDate ?? "").trim(),
+      password: String(formData.get("password") ?? registerForm.password ?? "").trim()
+    };
+    const result = await Promise.resolve(onRegister?.(payload));
     if (result?.message) {
       setFeedback({
         tone: result.success ? "success" : "error",
@@ -164,6 +180,8 @@ export function AuthPage({
                     <label>
                       <span>Email</span>
                       <input
+                        name="email"
+                        autoComplete="email"
                         type="email"
                         value=${loginForm.email}
                         onChange=${(event) =>
@@ -179,6 +197,8 @@ export function AuthPage({
                       <span>Senha</span>
                       <div className="auth-input-with-action">
                         <input
+                          name="password"
+                          autoComplete="current-password"
                           type=${showLoginPassword ? "text" : "password"}
                           value=${loginForm.password}
                           onChange=${(event) =>
@@ -210,6 +230,8 @@ export function AuthPage({
                   <label>
                     <span>Nome</span>
                     <input
+                      name="fullName"
+                      autoComplete="name"
                       value=${registerForm.fullName}
                       onChange=${(event) =>
                           setRegisterForm((current) => ({
@@ -223,6 +245,8 @@ export function AuthPage({
                   <label>
                     <span>Email</span>
                     <input
+                      name="email"
+                      autoComplete="email"
                       type="email"
                       value=${registerForm.email}
                         onChange=${(event) =>
@@ -237,6 +261,7 @@ export function AuthPage({
                   <label>
                     <span>Empresa</span>
                     <input
+                      name="company"
                       value=${registerForm.company}
                         onChange=${(event) =>
                           setRegisterForm((current) => ({
@@ -250,6 +275,7 @@ export function AuthPage({
                   <label>
                     <span>Setor</span>
                     <input
+                      name="department"
                       value=${registerForm.department}
                         onChange=${(event) =>
                           setRegisterForm((current) => ({
@@ -263,6 +289,8 @@ export function AuthPage({
                   <label>
                     <span>CPF</span>
                       <input
+                        name="cpf"
+                        autoComplete="off"
                         value=${registerForm.cpf}
                         onChange=${(event) =>
                           setRegisterForm((current) => ({
@@ -276,6 +304,8 @@ export function AuthPage({
                   <label>
                     <span>Telefone</span>
                     <input
+                      name="phone"
+                      autoComplete="tel"
                       value=${registerForm.phone}
                         onChange=${(event) =>
                           setRegisterForm((current) => ({
@@ -289,8 +319,10 @@ export function AuthPage({
                   <label>
                     <span>Nascimento</span>
                     <input
+                      name="birthDate"
+                      autoComplete="bday"
                       type="date"
-                        value=${registerForm.birthDate}
+                      value=${registerForm.birthDate}
                         onChange=${(event) =>
                           setRegisterForm((current) => ({
                             ...current,
@@ -302,10 +334,12 @@ export function AuthPage({
                     <label>
                       <span>Senha</span>
                       <div className="auth-input-with-action">
-                        <input
-                          type=${showRegisterPassword ? "text" : "password"}
-                          value=${registerForm.password}
-                          onChange=${(event) =>
+                      <input
+                        name="password"
+                        autoComplete="new-password"
+                        type=${showRegisterPassword ? "text" : "password"}
+                        value=${registerForm.password}
+                        onChange=${(event) =>
                             setRegisterForm((current) => ({
                               ...current,
                               password: event.target.value
