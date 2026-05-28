@@ -1,3 +1,5 @@
+import { readSessionToken, storeSessionToken } from "./session-token.js";
+
 export function createAdminApiClient(baseUrl) {
   return {
     async fetchState() {
@@ -21,10 +23,13 @@ export function createAdminApiClient(baseUrl) {
     },
 
     async registerUser(input) {
-      return request(`${baseUrl}/auth/register`, {
+      const result = await request(`${baseUrl}/auth/register`, {
         method: "POST",
         body: JSON.stringify(input)
       });
+
+      storeSessionToken(result?.session?.token ?? "");
+      return result;
     },
 
     async createManagedUser(input) {
@@ -35,15 +40,19 @@ export function createAdminApiClient(baseUrl) {
     },
 
     async changePassword(input) {
-      return request(`${baseUrl}/auth/password`, {
+      const result = await request(`${baseUrl}/auth/password`, {
         method: "POST",
         body: JSON.stringify(input)
       });
+
+      storeSessionToken(result?.session?.token ?? "");
+      return result;
     }
   };
 }
 
 async function request(url, init) {
+  const sessionToken = readSessionToken();
   let response;
 
   try {
@@ -52,6 +61,7 @@ async function request(url, init) {
       credentials: "include",
       headers: {
         "Content-Type": "application/json",
+        ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
         ...(init.headers ?? {})
       }
     });

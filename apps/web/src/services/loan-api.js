@@ -1,3 +1,5 @@
+import { readSessionToken } from "./session-token.js";
+
 export function createLoanApiClient(baseUrl) {
   return {
     async fetchSeed() {
@@ -30,6 +32,7 @@ export function createLoanApiClient(baseUrl) {
 }
 
 async function request(url, init) {
+  const sessionToken = readSessionToken();
   let response;
 
   try {
@@ -38,6 +41,7 @@ async function request(url, init) {
       credentials: "include",
       headers: {
         "Content-Type": "application/json",
+        ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
         ...(init.headers ?? {})
       }
     });

@@ -382,6 +382,7 @@ export function createApiServer(repository, adminStateStore) {
           success: true,
           user: sanitizeUser(updatedUser),
           session: {
+            token: session.token,
             expiresAt: session.expiresAt,
             status: updatedUser.status ?? updatedUser.accessStatus
           }
@@ -528,6 +529,7 @@ async function handleRegister(response, body, adminStateStore, repository) {
     success: true,
     user: sanitizeUser(nextUser),
     session: {
+      token: session.token,
       expiresAt: session.expiresAt,
       status: nextUser.status
     },
@@ -613,6 +615,7 @@ async function handleLogin(response, body, adminStateStore) {
     success: true,
     user: sanitizeUser(normalizedUser),
     session: {
+      token: session.token,
       expiresAt: session.expiresAt,
       status
     },
@@ -651,6 +654,7 @@ async function handleCurrentSession(response, request, adminStateStore) {
     success: true,
     user: sanitizeUser(session.user),
     session: {
+      token: session.token,
       expiresAt: session.expiresAt,
       status: session.user.status ?? session.user.accessStatus
     }

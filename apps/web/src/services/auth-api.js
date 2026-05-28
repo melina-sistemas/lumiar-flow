@@ -1,27 +1,47 @@
+import { clearSessionToken, readSessionToken, storeSessionToken } from "./session-token.js";
+
 export function createAuthApiClient(baseUrl) {
   return {
     async login(input) {
-      return request(`${baseUrl}/auth/login`, {
+      const result = await request(`${baseUrl}/auth/login`, {
         method: "POST",
         body: JSON.stringify(input)
       });
+
+      storeSessionToken(result?.session?.token ?? "");
+      return result;
     },
 
     async me() {
-      return request(`${baseUrl}/auth/me`, {
-        method: "GET"
-      });
+      try {
+        const result = await request(`${baseUrl}/auth/me`, {
+          method: "GET"
+        });
+        storeSessionToken(result?.session?.token ?? readSessionToken());
+        return result;
+      } catch (error) {
+        if (error?.status === 401) {
+          clearSessionToken();
+        }
+
+        throw error;
+      }
     },
 
     async logout() {
-      return request(`${baseUrl}/auth/logout`, {
-        method: "POST"
-      });
+      try {
+        return await request(`${baseUrl}/auth/logout`, {
+          method: "POST"
+        });
+      } finally {
+        clearSessionToken();
+      }
     }
   };
 }
 
 async function request(url, init) {
+  const sessionToken = readSessionToken();
   let response;
 
   try {
@@ -30,6 +50,7 @@ async function request(url, init) {
       credentials: "include",
       headers: {
         "Content-Type": "application/json",
+        ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
         ...(init.headers ?? {})
       }
     });
