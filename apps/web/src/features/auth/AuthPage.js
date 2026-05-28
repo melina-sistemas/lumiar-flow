@@ -51,6 +51,16 @@ export function AuthPage({
       email: String(formData.get("email") ?? loginForm.email ?? "").trim(),
       password: String(formData.get("password") ?? loginForm.password ?? "").trim()
     };
+
+    if (!payload.email || !payload.password) {
+      setFeedback({
+        tone: "error",
+        title: "Campos obrigatórios",
+        message: "Preencha e-mail e senha para entrar."
+      });
+      return;
+    }
+
     const result = await Promise.resolve(onLogin?.(payload));
     if (result?.message) {
       setFeedback({
@@ -183,6 +193,7 @@ export function AuthPage({
                         name="email"
                         autoComplete="email"
                         type="email"
+                        required
                         value=${loginForm.email}
                         onChange=${(event) =>
                           setLoginForm((current) => ({
@@ -200,6 +211,8 @@ export function AuthPage({
                           name="password"
                           autoComplete="current-password"
                           type=${showLoginPassword ? "text" : "password"}
+                          required
+                          minLength="1"
                           value=${loginForm.password}
                           onChange=${(event) =>
                             setLoginForm((current) => ({
@@ -232,6 +245,7 @@ export function AuthPage({
                     <input
                       name="fullName"
                       autoComplete="name"
+                      required
                       value=${registerForm.fullName}
                       onChange=${(event) =>
                           setRegisterForm((current) => ({
@@ -248,6 +262,7 @@ export function AuthPage({
                       name="email"
                       autoComplete="email"
                       type="email"
+                      required
                       value=${registerForm.email}
                         onChange=${(event) =>
                           setRegisterForm((current) => ({
@@ -262,6 +277,7 @@ export function AuthPage({
                     <span>Empresa</span>
                     <input
                       name="company"
+                      required
                       value=${registerForm.company}
                         onChange=${(event) =>
                           setRegisterForm((current) => ({
@@ -276,6 +292,7 @@ export function AuthPage({
                     <span>Setor</span>
                     <input
                       name="department"
+                      required
                       value=${registerForm.department}
                         onChange=${(event) =>
                           setRegisterForm((current) => ({
@@ -291,6 +308,7 @@ export function AuthPage({
                       <input
                         name="cpf"
                         autoComplete="off"
+                        required
                         value=${registerForm.cpf}
                         onChange=${(event) =>
                           setRegisterForm((current) => ({
@@ -306,6 +324,7 @@ export function AuthPage({
                     <input
                       name="phone"
                       autoComplete="tel"
+                      required
                       value=${registerForm.phone}
                         onChange=${(event) =>
                           setRegisterForm((current) => ({
@@ -318,11 +337,12 @@ export function AuthPage({
 
                   <label>
                     <span>Nascimento</span>
-                    <input
-                      name="birthDate"
-                      autoComplete="bday"
-                      type="date"
-                      value=${registerForm.birthDate}
+                      <input
+                        name="birthDate"
+                        autoComplete="bday"
+                        type="date"
+                        required
+                        value=${registerForm.birthDate}
                         onChange=${(event) =>
                           setRegisterForm((current) => ({
                             ...current,
@@ -338,9 +358,11 @@ export function AuthPage({
                         name="password"
                         autoComplete="new-password"
                         type=${showRegisterPassword ? "text" : "password"}
+                        required
+                        minLength="8"
                         value=${registerForm.password}
                         onChange=${(event) =>
-                            setRegisterForm((current) => ({
+                          setRegisterForm((current) => ({
                               ...current,
                               password: event.target.value
                             }))}
