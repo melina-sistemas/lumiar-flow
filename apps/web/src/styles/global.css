@@ -208,17 +208,18 @@ textarea {
 .sidebar-brand {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 14px 14px 18px;
+  gap: 16px;
+  padding: 16px 16px 20px;
   border-radius: 22px;
   background: transparent;
   box-shadow: none;
 }
 
 .sidebar-logo {
-  width: 40px;
-  height: 40px;
+  width: clamp(52px, 5vw, 60px);
+  height: clamp(52px, 5vw, 60px);
   object-fit: contain;
+  flex-shrink: 0;
 }
 
 .sidebar-brand-copy {
@@ -1496,12 +1497,34 @@ textarea {
   gap: 20px;
 }
 
+.branding-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.branding-logo-shell,
+.branding-theme-shell,
+.branding-palette-shell {
+  display: grid;
+  gap: 16px;
+}
+
+.branding-palette-shell {
+  grid-column: 1 / -1;
+}
+
+.branding-logo-actions {
+  align-items: center;
+  justify-content: space-between;
+}
+
 .branding-simple-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: start;
 }
 
-.branding-asset-card,
 .branding-theme-shell {
   display: grid;
   gap: 18px;
@@ -1518,6 +1541,30 @@ textarea {
 .branding-layout-grid,
 .branding-palette-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.branding-palette-grid-simple {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.branding-logo-shell .branding-live-preview {
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+}
+
+.branding-logo-shell .branding-live-preview p {
+  max-width: 34ch;
+}
+
+.branding-palette-shell .branding-palette-card {
+  min-height: 146px;
+  padding: 12px;
+  gap: 8px;
+}
+
+.branding-palette-shell .branding-palette-card .branding-swatch-row {
+  margin-top: auto;
 }
 
 .branding-option-card {
@@ -1556,6 +1603,10 @@ textarea {
   color: var(--muted);
   font-size: 0.84rem;
   line-height: 1.5;
+}
+
+.branding-option-card .branding-swatch-row {
+  margin-top: 2px;
 }
 
 .branding-option-media {
@@ -1830,6 +1881,8 @@ textarea {
 .branding-theme-card {
   display: grid;
   gap: 10px;
+  min-height: 112px;
+  padding: 12px;
 }
 
 .branding-theme-card small {
@@ -1846,9 +1899,10 @@ textarea {
 }
 
 .branding-live-preview-logo {
-  width: 88px;
-  height: 88px;
+  width: clamp(96px, 10vw, 120px);
+  height: clamp(96px, 10vw, 120px);
   object-fit: contain;
+  flex-shrink: 0;
 }
 
 .branding-live-preview strong {
@@ -2991,10 +3045,11 @@ textarea {
 }
 
 .logo-img {
-  height: 36px;
+  height: clamp(42px, 3.4vw, 48px);
   width: auto;
   object-fit: contain;
   display: block;
+  flex-shrink: 0;
 }
 
 .logo-text {
@@ -3294,10 +3349,11 @@ textarea {
 }
 
 .auth-card-brand img {
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
+  width: clamp(48px, 6vw, 60px);
+  height: clamp(48px, 6vw, 60px);
+  border-radius: 16px;
   object-fit: cover;
+  flex-shrink: 0;
 }
 
 .auth-card-brand strong {
@@ -3526,9 +3582,10 @@ textarea {
 }
 
 .auth-topbar-logo {
-  width: 38px;
-  height: 38px;
+  width: clamp(42px, 5vw, 48px);
+  height: clamp(42px, 5vw, 48px);
   object-fit: contain;
+  flex-shrink: 0;
 }
 
 .auth-message {
@@ -5791,6 +5848,14 @@ body[data-brand-theme="dark"] .premium-access-note strong {
   .admin-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .branding-settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .branding-palette-grid-simple {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 920px) {
@@ -6078,7 +6143,7 @@ body[data-brand-theme="dark"] .premium-access-note strong {
   }
 
   .logo-img {
-    height: 34px;
+    height: 38px;
   }
 
   .logo-text {
@@ -6115,6 +6180,16 @@ body[data-brand-theme="dark"] .premium-access-note strong {
 
   .auth-card-minimal {
     padding: 24px 20px;
+  }
+
+  .branding-settings-grid,
+  .branding-palette-grid-simple {
+    grid-template-columns: 1fr;
+  }
+
+  .branding-logo-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .catalog-grid {
