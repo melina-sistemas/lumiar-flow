@@ -111,10 +111,46 @@ body[data-brand-theme="dark"] .branding-live-preview {
   border-color: rgba(148, 163, 184, 0.2);
 }
 
+body[data-brand-theme="dark"] .branding-summary-card {
+  background: linear-gradient(180deg, #102033 0%, #0d1727 100%);
+  color: var(--text);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+body[data-brand-theme="dark"] .branding-summary-card span,
+body[data-brand-theme="dark"] .branding-summary-card small {
+  color: var(--text-soft);
+}
+
 body[data-brand-theme="dark"] .branding-option-card span,
 body[data-brand-theme="dark"] .branding-live-preview p,
 body[data-brand-theme="dark"] .admin-helper {
   color: var(--text-soft);
+}
+
+body[data-brand-theme="dark"] .admin-feedback {
+  background: rgba(6, 147, 227, 0.14);
+  color: var(--text);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+body[data-brand-theme="dark"] .branding-asset-preview,
+body[data-brand-theme="dark"] .branding-simple-preview {
+  background: linear-gradient(180deg, #102033 0%, #0d1727 100%);
+  color: var(--text);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+body[data-brand-theme="dark"] .branding-asset-copy p,
+body[data-brand-theme="dark"] .branding-asset-copy small,
+body[data-brand-theme="dark"] .branding-simple-preview p {
+  color: var(--text-soft);
+}
+
+body[data-brand-theme="dark"] .branding-reset-button {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
 }
 
 * {
@@ -1460,6 +1496,17 @@ textarea {
   gap: 20px;
 }
 
+.branding-simple-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+}
+
+.branding-asset-card,
+.branding-theme-shell {
+  display: grid;
+  gap: 18px;
+}
+
 .branding-option-grid {
   display: grid;
   gap: 14px;
@@ -1674,6 +1721,10 @@ textarea {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.branding-theme-grid-simple {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .branding-upload-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1719,6 +1770,45 @@ textarea {
 
 .branding-upload-row input[type="file"] {
   max-width: 100%;
+}
+
+.branding-asset-preview {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #fefefe 0%, #f5f8fc 100%);
+  border: 1px solid rgba(6, 147, 227, 0.08);
+}
+
+.branding-asset-image {
+  width: 100%;
+  max-height: 160px;
+  object-fit: contain;
+  border-radius: 14px;
+  background: #f4f7fb;
+}
+
+.branding-asset-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.branding-asset-copy strong {
+  font-size: 0.98rem;
+}
+
+.branding-asset-copy p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+  font-size: 0.84rem;
+}
+
+.branding-asset-copy small {
+  color: var(--primary);
+  font-size: 0.8rem;
+  font-weight: 700;
 }
 
 .branding-action-row {
@@ -4176,6 +4266,41 @@ textarea {
   flex-wrap: wrap;
 }
 
+.book-availability-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.book-availability-row-modal {
+  padding: 2px 0 0;
+}
+
+.book-availability-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(6, 147, 227, 0.08);
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+
+.book-availability-pill.muted {
+  background: rgba(123, 135, 145, 0.12);
+  color: var(--muted);
+}
+
+.book-availability-pill.accent {
+  background: rgba(6, 147, 227, 0.12);
+  color: var(--primary-dark);
+}
+
 .book-rating {
   color: var(--primary);
   font-size: 0.82rem;
@@ -4378,7 +4503,7 @@ textarea {
 
 .book-modal-description {
   margin: 0;
-  color: #31414f;
+  color: var(--text-soft);
   line-height: 1.7;
   font-size: 0.98rem;
 }
@@ -4399,7 +4524,7 @@ textarea {
 
 .book-modal-summary p {
   margin: 0;
-  color: #516378;
+  color: var(--text-soft);
   line-height: 1.65;
 }
 
@@ -4451,6 +4576,86 @@ textarea {
 .premium-access-note.blocked {
   background: rgba(245, 158, 11, 0.08);
   border-color: rgba(245, 158, 11, 0.15);
+}
+
+body[data-brand-theme="dark"] .book-availability-pill {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--text-soft);
+}
+
+body[data-brand-theme="dark"] .book-availability-pill.muted {
+  background: rgba(148, 163, 184, 0.18);
+  color: var(--muted);
+}
+
+body[data-brand-theme="dark"] .book-availability-pill.accent {
+  background: rgba(6, 147, 227, 0.18);
+  color: #9ed6ff;
+}
+
+body[data-brand-theme="dark"] .book-read-button {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--text);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+body[data-brand-theme="dark"] .book-read-button:hover {
+  background: rgba(148, 163, 184, 0.18);
+}
+
+body[data-brand-theme="dark"] .book-status {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--text-soft);
+}
+
+body[data-brand-theme="dark"] .book-status.out-of-stock,
+body[data-brand-theme="dark"] .book-status.loan-pending_approval {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
+}
+
+body[data-brand-theme="dark"] .book-status.loan-ready_for_pickup {
+  background: rgba(6, 147, 227, 0.18);
+  color: #9ed6ff;
+}
+
+body[data-brand-theme="dark"] .book-status.loan-borrowed {
+  background: rgba(148, 163, 184, 0.16);
+  color: var(--text);
+}
+
+body[data-brand-theme="dark"] .modal-status-pill.available {
+  background: rgba(6, 147, 227, 0.2);
+  color: #c4eaff;
+}
+
+body[data-brand-theme="dark"] .modal-status-pill.borrowed {
+  background: rgba(15, 23, 42, 0.92);
+  color: var(--text);
+}
+
+body[data-brand-theme="dark"] .book-modal-close {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--text);
+}
+
+body[data-brand-theme="dark"] .book-modal-description,
+body[data-brand-theme="dark"] .book-modal-summary p,
+body[data-brand-theme="dark"] .modal-borrow-panel span {
+  color: var(--text-soft);
+}
+
+body[data-brand-theme="dark"] .book-modal-summary,
+body[data-brand-theme="dark"] .modal-borrow-panel,
+body[data-brand-theme="dark"] .premium-access-note {
+  background: linear-gradient(180deg, rgba(15, 27, 46, 0.96), rgba(13, 23, 39, 0.98));
+  border-color: rgba(148, 163, 184, 0.16);
+}
+
+body[data-brand-theme="dark"] .book-modal-summary strong,
+body[data-brand-theme="dark"] .modal-borrow-panel strong,
+body[data-brand-theme="dark"] .premium-access-note strong {
+  color: var(--text);
 }
 
 .reader-modal-backdrop {
@@ -5706,7 +5911,8 @@ textarea {
   .profile-metrics,
   .progress-panel,
   .auth-form-grid,
-  .metric-grid {
+  .metric-grid,
+  .branding-theme-grid-simple {
     grid-template-columns: 1fr;
   }
 

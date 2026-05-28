@@ -56,7 +56,9 @@ export function BookCatalog({
   onSelectBook,
   loanActions,
   currentReaderLoans = [],
-  currentReader = null
+  currentReader = null,
+  onLoginRequest = null,
+  onAccountRequest = null
 }) {
   const [now, setNow] = useState(Date.now());
   const [busyBookId, setBusyBookId] = useState("");
@@ -138,6 +140,12 @@ export function BookCatalog({
         const availableCopies = Number(
           book.availableCopies ?? book.availableQuantity ?? 0
         );
+        const totalCopies = Math.max(
+          availableCopies,
+          Number(book.totalCopies ?? book.totalQuantity ?? availableCopies ?? 0)
+        );
+        const borrowedCopies =
+          book.type === "physical" ? Math.max(0, totalCopies - availableCopies) : 0;
         const isOutOfStock = book.type === "physical" && availableCopies <= 0;
         const isUnavailable = isOutOfStock || !book.isActive;
         const hasActiveBorrowedLoan = currentReaderLoans.some((loan) => loan.status === "BORROWED");
@@ -147,17 +155,19 @@ export function BookCatalog({
           ? "Confirmar empréstimo"
           : isOutOfStock && book.type === "physical"
           ? currentReaderWaitlist
-            ? `Na fila #${currentReaderWaitlist.position || getWaitlistPosition(waitlists, book.id, borrowerId)}`
-            : "Entrar na fila"
+          ? `Na fila #${currentReaderWaitlist.position || getWaitlistPosition(waitlists, book.id, borrowerId)}`
+          : "Entrar na fila"
           : book.type === "digital"
           ? "Acessar livro"
           : hasActiveBorrowedLoan
-          ? "Reservar livro"
+          ? "Devolva o livro atual"
           : "Solicitar empréstimo";
 
         return {
           ...book,
           availableCopies,
+          totalCopies,
+          borrowedCopies,
           currentReaderLoan,
           currentReaderWaitlist,
           nextLoan,
@@ -169,8 +179,7 @@ export function BookCatalog({
           requestLabel,
           returnText: buildReturnCountdown(
             nextLoan?.status === "READY_FOR_PICKUP" ? nextLoan.readyUntil || nextLoan.dueAt : nextLoan?.dueAt,
-            now,
-            nextLoan?.status === "BORROWED" ? 1 : 0
+            now
           ),
           summary: buildSummary(book)
         };
@@ -505,10 +514,10 @@ export function BookCatalog({
     setFlash(null);
 
     try {
-      const response = loanActions?.requestLoan({
+      const response = await Promise.resolve(loanActions?.requestLoan({
         userId: borrowerId,
         bookId: book.id
-      });
+      }));
 
       if (!response?.success) {
         setFlash({
@@ -564,7 +573,7 @@ export function BookCatalog({
     setFlash(null);
 
     try {
-      const response = loanActions?.confirmPickup(targetLoan.id);
+      const response = await Promise.resolve(loanActions?.confirmPickup(targetLoan.id));
 
       if (!response?.success) {
         setFlash({
@@ -681,6 +690,18 @@ export function BookCatalog({
                     : null}
                   <span className="book-rating">${formatRating(book.rating)}</span>
                 </div>
+                <div className="book-availability-row">
+                  <span className="book-availability-pill">
+                    ${book.type === "digital"
+                      ? "Acesso digital"
+                      : `${book.availableCopies} ${book.availableCopies === 1 ? "disponível" : "disponíveis"}`}
+                  </span>
+                  ${book.type === "physical"
+                    ? html`<span className="book-availability-pill muted">
+                        ${book.borrowedCopies} emprestado${book.borrowedCopies === 1 ? "" : "s"}
+                      </span>`
+                    : null}
+                </div>
               </div>
 
               <div className="book-footer">
@@ -711,6 +732,8 @@ export function BookCatalog({
                   ? html`<span className="book-status">Indisponível agora</span>`
                   : !isAuthenticated
                   ? html`<span className="book-status">Entre para solicitar</span>`
+                  : book.type === "physical" && book.hasActiveBorrowedLoan
+                  ? html`<span className="book-status loan-borrowed">Devolva o livro atual</span>`
                   : book.type === "physical" && !canRequestPhysicalLoan
                             ? html`<span className="book-status">Em aprovação</span>`
                   : html`
@@ -819,6 +842,24 @@ export function BookCatalog({
                         `
                       : null}
 
+                    <div className="book-availability-row book-availability-row-modal">
+                      <span className="book-availability-pill">
+                        ${modalBook.type === "digital"
+                          ? "Acesso digital"
+                          : `${modalBook.availableCopies} ${modalBook.availableCopies === 1 ? "disponível" : "disponíveis"}`}
+                      </span>
+                      ${modalBook.type === "physical"
+                        ? html`<span className="book-availability-pill muted">
+                            ${modalBook.borrowedCopies} emprestado${modalBook.borrowedCopies === 1 ? "" : "s"}
+                          </span>`
+                        : null}
+                      ${modalBook.currentReaderLoan?.status === "BORROWED"
+                        ? html`<span className="book-availability-pill accent">
+                            ${modalBook.returnText}
+                          </span>`
+                        : null}
+                    </div>
+
                     ${modalBook.currentReaderLoan
                       ? html`
                           <div className="modal-borrow-panel muted">
@@ -873,11 +914,27 @@ export function BookCatalog({
                             </span>
                           </div>
                         `
+                      : modalBook.type === "physical" && modalBook.hasActiveBorrowedLoan
+                      ? html`
+                          <div className="modal-borrow-panel muted">
+                            <strong>Empréstimo ativo em andamento</strong>
+                            <span>
+                              Você já está com um livro físico em uso. Conclua a devolução para solicitar
+                              outro exemplar físico.
+                            </span>
+                            <button type="button" className="book-read-button" onClick=${() => onAccountRequest?.()}>
+                              Ver minha conta
+                            </button>
+                          </div>
+                        `
                       : !isAuthenticated
                       ? html`
                           <div className="modal-borrow-panel muted">
                             <strong>Login necessário</strong>
                             <span>Entre no sistema para solicitar ou acessar este livro.</span>
+                            <button type="button" className="book-read-button" onClick=${() => onLoginRequest?.()}>
+                              Fazer login
+                            </button>
                           </div>
                         `
                       : html`
@@ -895,7 +952,7 @@ export function BookCatalog({
                                 : "Veja os detalhes e solicite este livro quando estiver pronto."}
                             </span>
                             ${modalBook.hasActiveBorrowedLoan && modalBook.type === "physical"
-                              ? html`<small>Você já possui leitura ativa. Depois de devolver, confirme este livro.</small>`
+                              ? html`<small>Você já possui leitura ativa. Depois de devolver, volte para solicitar este livro.</small>`
                               : null}
                             <button
                               type="button"
@@ -1210,23 +1267,23 @@ function formatLoanDate(value) {
   return new Date(value).toLocaleDateString("pt-BR");
 }
 
-function buildReturnCountdown(dueAt, now, safetyDays = 0) {
+function buildReturnCountdown(dueAt, now) {
   if (!dueAt) {
-    return "Volta em breve";
+    return "Prazo em breve";
   }
 
-  const diff = new Date(dueAt).getTime() - now + safetyDays * 24 * 60 * 60 * 1000;
+  const diff = new Date(dueAt).getTime() - now;
   const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
 
   if (days <= 0) {
-    return "Volta hoje";
+    return "Devolver hoje";
   }
 
   if (days === 1) {
-    return "Volta em 1 dia";
+    return "Devolver em 1 dia";
   }
 
-  return `Volta em ${days} dias`;
+  return `Devolver em ${days} dias`;
 }
 
 function getWaitlistPosition(waitlists, bookId, userId) {

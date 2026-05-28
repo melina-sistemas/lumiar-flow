@@ -967,6 +967,14 @@ function assignBookToUser(userId, bookId) {
         return current;
       }
 
+      if (book.type !== "digital" && hasActiveBorrowedLoan) {
+        result = {
+          success: false,
+          message: "Você já possui um empréstimo ativo. Devolva o livro atual antes de solicitar outro."
+        };
+        return current;
+      }
+
       const now = new Date().toISOString();
 
       if (book.type === "digital") {

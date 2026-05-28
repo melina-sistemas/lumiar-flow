@@ -131,6 +131,7 @@ export function App() {
   const [selectedBookId, setSelectedBookId] = useState("");
   const [selectedUserId, setSelectedUserId] = useState("");
   const [headerSearchQuery, setHeaderSearchQuery] = useState("");
+  const sessionSyncRef = React.useRef(0);
   const isAuthRoute =
     location.pathname === "/entrar" ||
     location.pathname === "/cadastrar" ||
@@ -520,6 +521,7 @@ export function App() {
 
   useEffect(() => {
     let ignore = false;
+    const requestId = ++sessionSyncRef.current;
 
     async function loadSession() {
       setAuthLoading(true);
@@ -531,13 +533,17 @@ export function App() {
           return;
         }
 
+        if (requestId !== sessionSyncRef.current) {
+          return;
+        }
+
         setAuthUser(result?.user ? normalizeAuthUser(result.user) : null);
       } catch {
-        if (!ignore) {
+        if (!ignore && requestId === sessionSyncRef.current) {
           setAuthUser(null);
         }
       } finally {
-        if (!ignore) {
+        if (!ignore && requestId === sessionSyncRef.current) {
           setAuthLoading(false);
         }
       }
@@ -632,7 +638,9 @@ export function App() {
     loanActions: adminPanel.actions,
     currentReader,
     currentReaderLoans,
-    hasApprovedAccess
+    hasApprovedAccess,
+    onLoginRequest: () => navigate("/entrar"),
+    onAccountRequest: () => navigate("/minha-conta")
   };
   async function handleLogin(credentials) {
     try {
@@ -646,6 +654,7 @@ export function App() {
         };
       }
 
+      sessionSyncRef.current += 1;
       setAuthUser(nextUser);
       setSelectedUserId(nextUser.status === "pending" ? "" : nextUser.id);
 
@@ -673,6 +682,7 @@ export function App() {
 
   async function handleLogout() {
     try {
+      sessionSyncRef.current += 1;
       await authApi.logout();
     } catch {
       // Ignora falhas de logout local para nao travar a interface.
@@ -695,6 +705,7 @@ export function App() {
       const nextUser = normalizeAuthUser(result.user ?? null);
 
       if (nextUser) {
+        sessionSyncRef.current += 1;
         setAuthUser(nextUser);
         setSelectedUserId("");
       }

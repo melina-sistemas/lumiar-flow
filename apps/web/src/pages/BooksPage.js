@@ -23,7 +23,9 @@ export function BooksPage({
   selectedBookId,
   onSelectBook,
   loanActions,
-  currentReaderLoans
+  currentReaderLoans,
+  onLoginRequest,
+  onAccountRequest
 }) {
   const [bookTypeFilter, setBookTypeFilter] = useState("all");
 
@@ -135,6 +137,8 @@ export function BooksPage({
           currentReaderLoans=${currentReaderLoans}
           currentReader=${currentReader}
           isAuthenticated=${isAuthenticated}
+          onLoginRequest=${onLoginRequest}
+          onAccountRequest=${onAccountRequest}
         />
       <//>
     <//>
