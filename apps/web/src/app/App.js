@@ -1394,10 +1394,40 @@ function mergeBooks(primaryBooks = [], secondaryBooks = []) {
 
   for (const book of secondaryBooks) {
     const normalized = { ...book };
-    merged.set(buildBookMergeKey(normalized), normalized);
+    const key = buildBookMergeKey(normalized);
+    const existing = merged.get(key);
+
+    if (!existing) {
+      merged.set(key, normalized);
+      continue;
+    }
+
+    merged.set(key, mergeBookRecord(existing, normalized));
   }
 
   return Array.from(merged.values());
+}
+
+function mergeBookRecord(baseBook, overrideBook) {
+  const merged = { ...baseBook };
+
+  for (const [key, value] of Object.entries(overrideBook ?? {})) {
+    if (value === undefined || value === null) {
+      continue;
+    }
+
+    if (typeof value === "string" && value.trim() === "") {
+      continue;
+    }
+
+    if (Array.isArray(value) && value.length === 0) {
+      continue;
+    }
+
+    merged[key] = value;
+  }
+
+  return merged;
 }
 
 function mergeLoans(primaryLoans = [], secondaryLoans = []) {
