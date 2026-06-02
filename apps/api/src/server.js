@@ -541,6 +541,12 @@ async function handleRegister(response, body, adminStateStore, repository) {
 async function handleLogin(response, body, adminStateStore) {
   const email = String(body.email ?? "").trim().toLowerCase();
   const password = String(body.password ?? "").trim();
+  const bootstrapEmail = String(process.env.BOOTSTRAP_ADMIN_EMAIL ?? "").trim().toLowerCase();
+  const bootstrapPassword = String(process.env.BOOTSTRAP_ADMIN_PASSWORD ?? "").trim();
+  const canRepairBootstrapAdmin =
+    Boolean(bootstrapEmail) &&
+    Boolean(bootstrapPassword) &&
+    email === bootstrapEmail;
 
   if (!email || !password) {
     return sendJson(response, 400, {
@@ -552,8 +558,14 @@ async function handleLogin(response, body, adminStateStore) {
     });
   }
 
-  const currentState = await adminStateStore.read();
-  const user = findUserRecord(currentState.state.users, email);
+  let currentState = await adminStateStore.read();
+  let user = findUserRecord(currentState.state.users, email);
+
+  if (!user && canRepairBootstrapAdmin) {
+    await ensureBootstrapAdmin(adminStateStore);
+    currentState = await adminStateStore.read();
+    user = findUserRecord(currentState.state.users, email);
+  }
 
   if (!user) {
     return sendJson(response, 401, {
@@ -566,9 +578,20 @@ async function handleLogin(response, body, adminStateStore) {
   }
 
   const hasSecurePassword = Boolean(user.passwordHash && user.passwordSalt);
-  const isPasswordValid = hasSecurePassword
+  let isPasswordValid = hasSecurePassword
     ? verifyPassword(password, user.passwordHash, user.passwordSalt)
     : String(user.password ?? "").trim() === password;
+
+  if (!isPasswordValid && canRepairBootstrapAdmin) {
+    await ensureBootstrapAdmin(adminStateStore);
+    currentState = await adminStateStore.read();
+    user = findUserRecord(currentState.state.users, email);
+    const repairedHasSecurePassword = Boolean(user?.passwordHash && user?.passwordSalt);
+
+    isPasswordValid = repairedHasSecurePassword
+      ? verifyPassword(password, user.passwordHash, user.passwordSalt)
+      : String(user?.password ?? "").trim() === password;
+  }
 
   if (!isPasswordValid) {
     return sendJson(response, 401, {
@@ -1012,12 +1035,6 @@ async function ensureBootstrapAdmin(adminStateStore) {
   }
 
   const currentState = await adminStateStore.read();
-  const existing = findUserRecord(currentState.state.users, bootstrapEmail);
-
-  if (existing) {
-    return;
-  }
-
   const adminUser = createAuthUserRecord({
     id: "bootstrap-admin-melina",
     name: bootstrapName,
@@ -1029,10 +1046,15 @@ async function ensureBootstrapAdmin(adminStateStore) {
     createdByAdmin: true,
     mustChangePassword: false
   });
+  const nextUsers = upsertUserRecord(currentState.state.users, adminUser);
+
+  if (areUsersEquivalent(findUserRecord(currentState.state.users, bootstrapEmail), adminUser)) {
+    return;
+  }
 
   await adminStateStore.write({
     ...currentState.state,
-    users: [adminUser, ...(currentState.state.users ?? [])]
+    users: nextUsers
   });
 }
 
@@ -1042,6 +1064,28 @@ function sendUseCaseResult(response, result, successStatus) {
   }
 
   return sendJson(response, mapErrorToStatus(result.error.code), result);
+}
+
+function areUsersEquivalent(left, right) {
+  if (!left || !right) {
+    return false;
+  }
+
+  const comparableKeys = [
+    "id",
+    "name",
+    "email",
+    "role",
+    "level",
+    "status",
+    "accessStatus",
+    "createdByAdmin",
+    "mustChangePassword",
+    "passwordHash",
+    "passwordSalt"
+  ];
+
+  return comparableKeys.every((key) => String(left[key] ?? "") === String(right[key] ?? ""));
 }
 
 function mapErrorToStatus(code) {
