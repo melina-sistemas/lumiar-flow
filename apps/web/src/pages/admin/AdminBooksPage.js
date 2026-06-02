@@ -2,7 +2,7 @@
 import htm from "htm";
 import { AdminPageLayout } from "../../components/AdminPageLayout.js";
 import { createLoanApiClient } from "../../services/loan-api.js";
-import { createPlaceholderCover } from "../../services/google-books.js";
+import { createPlaceholderCover, resolveBookCoverSource } from "../../services/google-books.js";
 import { extractPdfTextFromFile } from "../../features/books/pdf-text.js";
 
 const html = htm.bind(React.createElement);
@@ -476,24 +476,22 @@ export function AdminBooksPage({ books, users, loans, actions, apiBaseUrl }) {
                 return html`
                   <tr key=${book.id}>
                     <td>
-              <div className="admin-book-cover">
-                ${book.coverUrl
-                          ? html`<img
-                              src=${book.coverUrl}
-                              alt=${`Capa de ${book.title}`}
-                              onError=${(event) => {
-                                const image = event.currentTarget;
+                      <div className="admin-book-cover">
+                        <img
+                          src=${resolveBookCoverSource(book)}
+                          alt=${`Capa de ${book.title}`}
+                          onError=${(event) => {
+                            const image = event.currentTarget;
 
-                                if (image?.dataset?.fallbackApplied === "true") {
-                                  return;
-                                }
+                            if (image?.dataset?.fallbackApplied === "true") {
+                              return;
+                            }
 
-                                image.dataset.fallbackApplied = "true";
-                                image.src = createPlaceholderCover(book);
-                              }}
-                            />`
-                          : html`<span>${book.title.slice(0, 1)}</span>`}
-              </div>
+                            image.dataset.fallbackApplied = "true";
+                            image.src = createPlaceholderCover(book);
+                          }}
+                        />
+                      </div>
                     </td>
                     <td><strong>${book.title}</strong></td>
                     <td>${book.author}</td>

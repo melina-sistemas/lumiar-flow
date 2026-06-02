@@ -3,7 +3,7 @@ import htm from "htm";
 import { PageLayout } from "../components/PageLayout.js";
 import { Section } from "../components/Section.js";
 import { FeedbackMessage } from "../components/FeedbackMessage.js";
-import { createPlaceholderCover } from "../services/google-books.js";
+import { createPlaceholderCover, resolveBookCoverSource } from "../services/google-books.js";
 
 const html = htm.bind(React.createElement);
 
@@ -660,9 +660,11 @@ function isGoldLevel(level) {
 }
 
 function renderBookCover(book) {
-  if (book?.coverUrl) {
+  const coverSource = resolveBookCoverSource(book);
+
+  if (coverSource) {
     return html`<img
-      src=${book.coverUrl}
+      src=${coverSource}
       alt=${`Capa do livro ${book.title || "Lumiar Flow"}`}
       loading="lazy"
       onError=${(event) => {

@@ -1,18 +1,12 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import htm from "htm";
-import { createPlaceholderCover } from "../../services/google-books.js";
+import { createPlaceholderCover, resolveBookCoverSource } from "../../services/google-books.js";
 
 const html = htm.bind(React.createElement);
 let pdfJsRuntimePromise = null;
 
 function resolveBookCover(book) {
-  const coverUrl = typeof book.coverUrl === "string" ? book.coverUrl.trim() : "";
-
-  if (coverUrl && isRenderableCoverUrl(coverUrl)) {
-    return coverUrl;
-  }
-
-  return createPlaceholderCover(book);
+  return resolveBookCoverSource(book);
 }
 
 function handleBookCoverError(event, book) {
@@ -24,23 +18,6 @@ function handleBookCoverError(event, book) {
 
   image.dataset.fallbackApplied = "true";
   image.src = createPlaceholderCover(book);
-}
-
-function isRenderableCoverUrl(coverUrl) {
-  if (!coverUrl) {
-    return false;
-  }
-
-  return (
-    coverUrl.startsWith("data:image/") ||
-    coverUrl.startsWith("blob:") ||
-    coverUrl.startsWith("/") ||
-    coverUrl.startsWith("./") ||
-    coverUrl.startsWith("../") ||
-    coverUrl.startsWith("http://localhost") ||
-    coverUrl.startsWith("https://localhost") ||
-    coverUrl.startsWith("https://lumiarflow")
-  );
 }
 
 export function BookCatalog({

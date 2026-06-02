@@ -5,6 +5,22 @@ export async function enrichBooksWithGoogleBooks(books) {
   return Promise.all(books.map((book) => enrichBook(book)));
 }
 
+export function resolveBookCoverSource(book) {
+  const coverUrl = typeof book?.coverUrl === "string" ? book.coverUrl.trim() : "";
+
+  if (!coverUrl) {
+    return createPlaceholderCover(book);
+  }
+
+  const normalizedCoverUrl = normalizeRenderableCoverUrl(coverUrl);
+
+  if (isRenderableCoverUrl(normalizedCoverUrl)) {
+    return normalizedCoverUrl;
+  }
+
+  return createPlaceholderCover(book);
+}
+
 async function enrichBook(book) {
   const cacheKey = buildCacheKey(book);
   const cached = readCache(cacheKey);
@@ -76,9 +92,38 @@ function normalizeCover(value) {
     return "";
   }
 
-  return String(value)
-    .replace("http://", "https://")
-    .replace("&edge=curl", "");
+  return normalizeRenderableCoverUrl(value).replace("&edge=curl", "");
+}
+
+function normalizeRenderableCoverUrl(value) {
+  const url = String(value).trim();
+
+  if (!url) {
+    return "";
+  }
+
+  if (url.startsWith("http://localhost") || url.startsWith("http://127.0.0.1")) {
+    return url;
+  }
+
+  return url.startsWith("http://") ? `https://${url.slice(7)}` : url;
+}
+
+function isRenderableCoverUrl(coverUrl) {
+  if (!coverUrl) {
+    return false;
+  }
+
+  return (
+    coverUrl.startsWith("data:image/") ||
+    coverUrl.startsWith("blob:") ||
+    coverUrl.startsWith("/") ||
+    coverUrl.startsWith("./") ||
+    coverUrl.startsWith("../") ||
+    coverUrl.startsWith("https://") ||
+    coverUrl.startsWith("http://localhost") ||
+    coverUrl.startsWith("http://127.0.0.1")
+  );
 }
 
 function buildFallbackMetadata(book) {
