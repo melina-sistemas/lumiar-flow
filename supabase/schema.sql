@@ -33,7 +33,25 @@ create table if not exists public.loans (
   level_at_loan text not null check (level_at_loan in ('easy', 'medium', 'hard')),
   borrowed_at timestamptz not null,
   due_at timestamptz not null,
-  status text not null check (status in ('active', 'overdue', 'returned')),
+  status text not null check (
+    status in (
+      'active',
+      'overdue',
+      'returned',
+      'DISPONIVEL',
+      'PENDENTE_APROVACAO',
+      'EMPRESTADO',
+      'AGUARDANDO_FILA',
+      'DEVOLVIDO',
+      'REJEITADO',
+      'READY_FOR_PICKUP',
+      'PENDING_APPROVAL',
+      'RETURN_REQUESTED',
+      'WAITING',
+      'EXPIRED',
+      'CANCELLED'
+    )
+  ),
   returned_at timestamptz null,
   return_record_id text null,
   created_at timestamptz not null default now(),
@@ -69,7 +87,7 @@ create table if not exists public.book_recommendations (
 );
 
 create table if not exists public.admin_state (
-  id text primary key,
+  key text primary key,
   payload jsonb not null,
   updated_at timestamptz not null default now()
 );

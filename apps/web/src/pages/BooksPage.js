@@ -14,6 +14,7 @@ export function BooksPage({
   books,
   activeLoans,
   borrowerId,
+  users = [],
   isAuthenticated,
   currentReader,
   waitlists = [],
@@ -136,6 +137,7 @@ export function BooksPage({
           loanActions=${loanActions}
           currentReaderLoans=${currentReaderLoans}
           currentReader=${currentReader}
+          users=${users}
           isAuthenticated=${isAuthenticated}
           onLoginRequest=${onLoginRequest}
           onAccountRequest=${onAccountRequest}

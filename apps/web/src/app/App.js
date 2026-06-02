@@ -223,11 +223,16 @@ export function App() {
       (user) => user.email && authUser?.email && user.email.toLowerCase() === authUser.email.toLowerCase()
     ) ||
     null;
+  const currentSessionUserId = matchedSessionUser?.id || authUser?.id || "";
   const currentReaderId = canUseLibraryAccess
-    ? selectedUserId || matchedSessionUser?.id || displayUsers[0]?.id || ""
+    ? activeAuthUser?.role === "admin"
+      ? selectedUserId || currentSessionUserId || displayUsers[0]?.id || ""
+      : currentSessionUserId
     : "";
   const currentReader =
-    canUseLibraryAccess ? displayUsers.find((user) => user.id === currentReaderId) ?? null : null;
+    canUseLibraryAccess
+      ? displayUsers.find((user) => user.id === currentReaderId) ?? matchedSessionUser ?? activeAuthUser
+      : null;
   const currentReaderLoans = canUseLibraryAccess
     ? libraryLoans.filter((loan) => loan.userId === currentReaderId && loan.status !== "RETURNED")
     : [];
@@ -565,12 +570,23 @@ export function App() {
   }, [libraryBooks, selectedBookId]);
 
   useEffect(() => {
+    if (!canUseLibraryAccess) {
+      return;
+    }
+
+    if (activeAuthUser?.role !== "admin") {
+      if (selectedUserId !== currentSessionUserId) {
+        setSelectedUserId(currentSessionUserId);
+      }
+      return;
+    }
+
     const stillExists = displayUsers.some((user) => user.id === selectedUserId);
 
     if (!stillExists) {
-      setSelectedUserId(displayUsers[0]?.id ?? "");
+      setSelectedUserId(currentSessionUserId || displayUsers[0]?.id || "");
     }
-  }, [displayUsers, selectedUserId]);
+  }, [activeAuthUser?.role, canUseLibraryAccess, currentSessionUserId, displayUsers, selectedUserId]);
 
   async function refreshCatalog(preferredBookId) {
     try {
@@ -633,6 +649,7 @@ export function App() {
     borrowerId,
     loading: loadingCatalog,
     errorMessage: catalogError,
+    users: displayUsers,
     selectedBookId,
     onSelectBook: setSelectedBookId,
     loanActions: adminPanel.actions,
@@ -666,7 +683,7 @@ export function App() {
         };
       }
 
-      navigate(nextUser.role === "admin" ? "/admin/books" : "/livros", { replace: true });
+      navigate("/livros", { replace: true });
 
       return {
         success: true,
@@ -1721,7 +1738,10 @@ function filterBooks(books, activeLoans, filter) {
   switch (filter) {
     case "available":
       return books.filter(
-        (book) => Number(book.availableCopies ?? book.availableQuantity ?? 0) > 0 && book.isActive
+        (book) =>
+          book.isActive &&
+          (book.type === "digital" ||
+            Number(book.availableCopies ?? book.availableQuantity ?? 0) > 0)
       );
     case "borrowed":
       return books.filter((book) =>

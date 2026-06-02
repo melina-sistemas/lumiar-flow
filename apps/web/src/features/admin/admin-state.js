@@ -1,6 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createAdminApiClient } from "../../services/admin-api.js";
 import { DEFAULT_BRAND_SETTINGS } from "../branding/brand-theme.js";
+import {
+  MAX_WAITLIST_BOOKS_PER_USER,
+  countUserWaitlistEntries,
+  getWaitlistEntry,
+  isLoanBorrowed,
+  isLoanPendingApproval,
+  isLoanReturned,
+  isWaitlistEntryActive
+} from "../books/loan-status.js";
 
 const STORAGE_KEY = "lumiar-flow-admin-panel-v1";
 const BOOTSTRAP_USERS = [
@@ -939,6 +948,8 @@ function assignBookToUser(userId, bookId) {
       }
 
       const userAccessStatus = normalizeUserAccessStatus(user.accessStatus ?? user.status);
+      const existingWaitlist = getWaitlistEntry(current.waitlists, book.id, user.id);
+      const userWaitlistCount = countUserWaitlistEntries(current.waitlists, user.id);
 
       if (book.type !== "digital" && userAccessStatus !== "approved") {
         result = {
@@ -956,10 +967,13 @@ function assignBookToUser(userId, bookId) {
           isActiveLoanStatus(loan.status)
       );
       const hasActiveBorrowedLoan = current.loans.some(
-        (loan) => loan.userId === input.userId && loan.status === "BORROWED"
+        (loan) =>
+          loan.userId === input.userId &&
+          loan.status === "BORROWED" &&
+          loan.type !== "digital"
       );
 
-      if (duplicateLoan) {
+      if (book.type !== "digital" && duplicateLoan) {
         result = {
           success: false,
           message: "Este livro já está associado a este usuário."
@@ -983,12 +997,12 @@ function assignBookToUser(userId, bookId) {
           userId: input.userId,
           bookId: input.bookId,
           requesterId: input.userId,
-          requestedAt: now,
+          requestedAt: input.requestedAt ?? now,
           type: "digital",
           status: "BORROWED",
           responsible: "",
           location: "",
-          dueAt: addDays(now, 180),
+          dueAt: input.dueAt ?? addDays(now, 180),
           borrowedAt: now,
           returnedAt: "",
           notes: input.notes ?? ""
@@ -1021,32 +1035,21 @@ function assignBookToUser(userId, bookId) {
       const availableQuantity = Number(book.availableQuantity ?? 0);
 
       if (availableQuantity <= 0) {
-        const nextWaitlist = createWaitlistEntry({
-          waitlists: current.waitlists,
-          bookId: book.id,
-          userId: user.id
-        });
-
         result = {
-          success: true,
-          waitlist: nextWaitlist.entry,
-          waitlistPosition: nextWaitlist.position,
-          message: `Livro indisponível. Você entrou na fila na posição ${nextWaitlist.position}.`
+          success: false,
+          code: "book_unavailable",
+          waitlist: existingWaitlist ?? null,
+          waitlistPosition: existingWaitlist
+            ? getWaitlistPosition(current.waitlists, book.id, user.id)
+            : 0,
+          message: existingWaitlist
+            ? `Você já está na fila deste livro na posição ${getWaitlistPosition(current.waitlists, book.id, user.id)}.`
+            : userWaitlistCount >= MAX_WAITLIST_BOOKS_PER_USER
+              ? "Você já possui 5 livros na fila de espera. Remova algum antes de adicionar outro."
+              : "Livro indisponível. Entre na fila de espera para acompanhar a próxima liberação."
         };
 
-        return stabilizeAdminState({
-          ...current,
-          waitlists: nextWaitlist.waitlists,
-          notifications: pushNotification(current.notifications, {
-            userId: user.id,
-            bookId: book.id,
-            type: "waitlist",
-            title: "Você entrou na fila",
-            message: `O livro \"${book.title}\" está indisponível. Você está na posição ${nextWaitlist.position} da fila.`,
-            actionLabel: "Ver livro",
-            actionTarget: "/livros"
-          })
-        });
+        return current;
       }
 
       const nextLoan = normalizeAdminLoan({
@@ -1054,12 +1057,12 @@ function assignBookToUser(userId, bookId) {
         userId: input.userId,
         bookId: input.bookId,
         requesterId: input.userId,
-        requestedAt: now,
+        requestedAt: input.requestedAt ?? now,
         type: "physical",
         status: "PENDING_APPROVAL",
         responsible: "",
         location: "",
-        dueAt: "",
+        dueAt: input.dueAt ?? addDays(now, current.settings.globalMaxDays),
         readyUntil: "",
         borrowedAt: "",
         returnedAt: "",
@@ -1086,6 +1089,132 @@ function assignBookToUser(userId, bookId) {
           book,
           user,
           nextLoan
+        )
+      });
+    });
+
+    return result;
+  }
+
+  function joinWaitlist(input) {
+    let result = {
+      success: false,
+      message: "Não foi possível entrar na fila de espera."
+    };
+
+    setState((current) => {
+      const book = current.books.find((item) => item.id === input.bookId);
+      const user = current.users.find((item) => item.id === input.userId);
+
+      if (!book || !user) {
+        result = {
+          success: false,
+          message: "Livro ou usuário não encontrado."
+        };
+        return current;
+      }
+
+      if (book.type === "digital") {
+        result = {
+          success: false,
+          message: "Livros digitais não usam fila de espera."
+        };
+        return current;
+      }
+
+      const userAccessStatus = normalizeUserAccessStatus(user.accessStatus ?? user.status);
+      if (userAccessStatus !== "approved") {
+        result = {
+          success: false,
+          message: "Seu cadastro precisa estar aprovado para entrar na fila."
+        };
+        return current;
+      }
+
+      const existingWaitlist = getWaitlistEntry(current.waitlists, book.id, user.id);
+
+      if (existingWaitlist) {
+        const position = getWaitlistPosition(current.waitlists, book.id, user.id);
+        result = {
+          success: true,
+          waitlist: existingWaitlist,
+          waitlistPosition: position,
+          message: `Você já está na fila deste livro na posição ${position}.`
+        };
+        return current;
+      }
+
+      const userWaitlistCount = countUserWaitlistEntries(current.waitlists, user.id);
+      if (userWaitlistCount >= MAX_WAITLIST_BOOKS_PER_USER) {
+        result = {
+          success: false,
+          code: "waitlist_limit_reached",
+          message: "Você já possui 5 livros na fila de espera. Remova algum antes de adicionar outro."
+        };
+        return current;
+      }
+
+      const nextWaitlist = createWaitlistEntry({
+        waitlists: current.waitlists,
+        bookId: book.id,
+        userId: user.id
+      });
+
+      result = {
+        success: true,
+        waitlist: nextWaitlist.entry,
+        waitlistPosition: nextWaitlist.position,
+        message: `Você entrou na fila de espera na posição ${nextWaitlist.position}.`
+      };
+
+      return stabilizeAdminState({
+        ...current,
+        waitlists: nextWaitlist.waitlists,
+        notifications: pushNotification(current.notifications, {
+          userId: user.id,
+          bookId: book.id,
+          type: "waitlist",
+          title: "Você entrou na fila",
+          message: `O livro "${book.title}" está na fila de espera. Você está na posição ${nextWaitlist.position}.`,
+          actionLabel: "Ver livro",
+          actionTarget: "/livros",
+          metadata: {
+            waitlistId: nextWaitlist.entry.id
+          }
+        })
+      });
+    });
+
+    return result;
+  }
+
+  function removeWaitlistEntry(waitlistId) {
+    let result = {
+      success: false,
+      message: "Não foi possível remover da fila."
+    };
+
+    setState((current) => {
+      const target = current.waitlists.find((entry) => entry.id === waitlistId);
+
+      if (!target) {
+        result = {
+          success: false,
+          message: "Fila não encontrada."
+        };
+        return current;
+      }
+
+      result = {
+        success: true,
+        message: "Você saiu da fila de espera."
+      };
+
+      return stabilizeAdminState({
+        ...current,
+        waitlists: current.waitlists.filter((entry) => entry.id !== waitlistId),
+        notifications: current.notifications.filter(
+          (notification) => notification.metadata?.waitlistId !== waitlistId
         )
       });
     });
@@ -1128,6 +1257,22 @@ function assignBookToUser(userId, bookId) {
         return current;
       }
 
+      const otherActiveLoan = current.loans.find(
+        (loan) =>
+          loan.userId === target.userId &&
+          loan.id !== target.id &&
+          loan.status === "BORROWED" &&
+          loan.type !== "digital"
+      );
+
+      if (otherActiveLoan) {
+        result = {
+          success: false,
+          message: "O usuário já possui um empréstimo físico ativo."
+        };
+        return current;
+      }
+
       if (book.type === "physical" && Number(book.availableQuantity ?? 0) <= 0) {
         result = {
           success: false,
@@ -1140,12 +1285,15 @@ function assignBookToUser(userId, bookId) {
         ...target,
         ...changes,
         approvedAt: new Date().toISOString(),
-        status: "READY_FOR_PICKUP"
+        borrowedAt: new Date().toISOString(),
+        dueAt: changes.dueAt ? new Date(changes.dueAt).toISOString() : addDays(new Date().toISOString(), current.settings.globalMaxDays),
+        readyUntil: "",
+        status: "BORROWED"
       });
       const loans = current.loans.map((loan) => (loan.id === loanId ? updatedLoan : loan));
       result = {
         success: true,
-        message: "Solicitação aprovada e pronta para retirada."
+        message: "Solicitação aprovada e empréstimo ativo."
       };
 
       return {
@@ -1163,7 +1311,7 @@ function assignBookToUser(userId, bookId) {
           book,
           user,
           updatedLoan,
-          "Livro disponível para retirada"
+          "Empréstimo liberado"
         )
       };
     });
@@ -1539,6 +1687,8 @@ function assignBookToUser(userId, bookId) {
       updateGamification,
       updateSettings,
       requestLoan,
+      joinWaitlist,
+      removeWaitlistEntry,
       approveLoan,
       rejectLoan,
       confirmPickup,

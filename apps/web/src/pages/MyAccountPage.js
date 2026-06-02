@@ -4,6 +4,13 @@ import { PageLayout } from "../components/PageLayout.js";
 import { Section } from "../components/Section.js";
 import { FeedbackMessage } from "../components/FeedbackMessage.js";
 import { createPlaceholderCover, resolveBookCoverSource } from "../services/google-books.js";
+import {
+  getLoanStatusLabel,
+  getWaitlistPosition,
+  isLoanBorrowed,
+  isLoanPendingApproval,
+  isLoanReturned
+} from "../features/books/loan-status.js";
 
 const html = htm.bind(React.createElement);
 
@@ -31,24 +38,19 @@ export function MyAccountPage({ currentUser, books, loans, waitlists = [], notif
     [currentUser?.id, waitlists]
   );
 
-  const actionableLoans = useMemo(
-    () =>
-      userLoans
-        .filter((loan) => loan.status !== "RETURNED")
-        .map((loan) => {
-          const book = books.find((item) => item.id === loan.bookId);
-          return {
-            ...loan,
-            book
-          };
-        })
-        .filter((loan) => loan.book),
-    [books, userLoans]
-  );
-
   const readLoans = userLoans.filter((loan) => loan.status === "RETURNED");
   const activeLoans = userLoans.filter((loan) => loan.status !== "RETURNED");
   const averageDays = calculateAverageDays(readLoans);
+  const currentLoan =
+    userLoans.find(
+      (loan) =>
+        isLoanBorrowed(loan.status) ||
+        isLoanPendingApproval(loan.status) ||
+        String(loan.status ?? "").trim().toUpperCase() === "READY_FOR_PICKUP"
+    ) ?? null;
+  const currentBook = currentLoan
+    ? books.find((book) => book.id === currentLoan.bookId) ?? null
+    : null;
 
   const readingList = useMemo(
     () =>
@@ -60,18 +62,7 @@ export function MyAccountPage({ currentUser, books, loans, waitlists = [], notif
         })),
     [books, currentUser?.readingList, userLoans]
   );
-
-  const personalizedRecommendations = useMemo(
-    () =>
-      buildPersonalizedRecommendations({
-        books,
-        readingList,
-        readLoans,
-        currentUser,
-        userLoans
-      }),
-    [books, currentUser, readLoans, readingList, userLoans]
-  );
+  const favorites = readingList;
 
   const topStats = [
     { label: "Livros lidos", value: readLoans.length },
@@ -323,128 +314,174 @@ export function MyAccountPage({ currentUser, books, loans, waitlists = [], notif
           <div className="account-hub-block">
             <div className="account-block-heading">
               <div>
-                <h3>Leituras e filas</h3>
-                <p>Acompanhe seus empréstimos atuais, reservas e a posição na fila de espera.</p>
+                <h3>Livro atual</h3>
+                <p>Veja o livro que está com você agora e o prazo de devolução.</p>
               </div>
             </div>
 
-            <div className="account-reading-grid">
-              ${actionableLoans.length > 0
-                ? actionableLoans.map(
-                    (loan) => html`
-                      <article key=${loan.id} className="account-reading-card">
-                        <div className="account-book-card-shell">
-                          <div className="account-book-cover">
-                            ${renderBookCover(loan.book)}
-                          </div>
-                          <div className="account-book-content">
-                            <div className="account-card-top">
-                              <strong>${loan.book.title}</strong>
-                              <span className=${`account-status-pill ${translateLoanStatusClass(loan.status)}`}>
-                                ${translateLoanStatus(loan.status)}
-                              </span>
-                            </div>
-                            <span>${loan.book.author}</span>
-                            <small>
-                              ${loan.status === "READY_FOR_PICKUP"
-                                ? `Retire ate ${formatDate(loan.readyUntil || loan.dueAt)}`
-                                : loan.status === "BORROWED"
-                                ? `Devolução prevista para ${formatDate(loan.dueAt)}`
-                                : `Solicitado em ${formatDate(loan.requestedAt)}`}
-                            </small>
-                          </div>
+            ${currentLoan && currentBook
+              ? html`
+                  <article className="account-reading-card">
+                    <div className="account-book-card-shell">
+                      <div className="account-book-cover">
+                        ${renderBookCover(currentBook)}
+                      </div>
+                      <div className="account-book-content">
+                        <div className="account-card-top">
+                          <strong>${currentBook.title}</strong>
+                          <span className=${`account-status-pill ${getLoanStatusTone(currentLoan.status)}`}>
+                            ${getLoanStatusLabel(currentLoan.status)}
+                          </span>
                         </div>
-
-                        <div className="account-form-actions between">
-                          ${loan.status === "BORROWED"
-                            ? html`
-                                <button
-                                  type="button"
-                                  className="admin-primary"
-                                  onClick=${() => {
-                                    const result = actions.markReturned(loan.id);
-                                    setFeedback({
-                                      tone: result.success ? "success" : "error",
-                                      title: result.success ? "Devolução registrada" : "Não foi possível devolver",
-                                      message: result.message
-                                    });
-                                  }}
-                                >
-                                  Devolver
-                                </button>
-                              `
-                            : loan.status === "READY_FOR_PICKUP"
-                            ? html`
-                                <button
-                                  type="button"
-                                  className="admin-primary"
-                                  onClick=${() => {
-                                    const result = actions.confirmPickup(loan.id);
-                                    setFeedback({
-                                      tone: result.success ? "success" : "error",
-                                      title: result.success ? "Retirada confirmada" : "Não foi possível confirmar",
-                                      message: result.message
-                                    });
-                                  }}
-                                >
-                                  Confirmar retirada
-                                </button>
-                              `
-                            : null}
-                        </div>
-                      </article>
-                    `
-                  )
-                : html`
-                    <article className="account-reading-card account-empty-card">
-                      <strong>Nenhuma leitura em andamento</strong>
-                      <span>Quando houver empréstimos ou reservas, eles aparecem aqui.</span>
-                    </article>
-                  `}
-            </div>
-
-            <div className="account-waitlist-block">
-              <div className="account-panel-head compact">
-                <div>
-                  <h4>Fila de espera</h4>
-                  <p>Livros que você quer ler, mas ainda aguardam disponibilidade.</p>
-                </div>
-              </div>
-
-              ${userWaitlists.length > 0
-                ? html`
-                    <div className="account-waitlist-list">
-                      ${userWaitlists.map((entry) => {
-                        const book = books.find((item) => item.id === entry.bookId);
-                        return html`
-                          <article key=${entry.id} className="account-waitlist-card">
-                            <div>
-                              <strong>${book?.title || "Livro indisponível"}</strong>
-                              <p>${book?.author || "Biblioteca interna"}</p>
-                            </div>
-                            <span className="account-soft-pill">Fila #${entry.position || 1}</span>
-                          </article>
-                        `;
-                      })}
+                        <span>${currentBook.author}</span>
+                        <small>
+                          ${currentLoan.status === "PENDING_APPROVAL"
+                            ? `Solicitado em ${formatDate(currentLoan.requestedAt)}`
+                            : `Retirada em ${formatDate(currentLoan.borrowedAt || currentLoan.requestedAt)} · Devolução prevista ${formatDate(currentLoan.dueAt)}`}
+                        </small>
+                      </div>
                     </div>
-                  `
-                : html`
-                    <p className="admin-helper">Nenhum livro na fila de espera no momento.</p>
-                  `}
-            </div>
+
+                    <div className="account-reading-details">
+                      <span>Restam ${getRemainingDaysLabel(currentLoan.dueAt)}</span>
+                      <span>Tipo ${currentBook.type === "digital" ? "digital" : "físico"}</span>
+                    </div>
+
+                    <div className="account-form-actions between">
+                      ${isLoanBorrowed(currentLoan.status) && currentLoan.type !== "digital"
+                        ? html`
+                            <button
+                              type="button"
+                              className="admin-primary"
+                              onClick=${() => {
+                                const result = actions.markReturned(currentLoan.id);
+                                setFeedback({
+                                  tone: result.success ? "success" : "error",
+                                  title: result.success ? "Devolução registrada" : "Não foi possível devolver",
+                                  message: result.message
+                                });
+                              }}
+                            >
+                              Devolver
+                            </button>
+                          `
+                        : null}
+                    </div>
+                  </article>
+                `
+              : html`
+                  <article className="account-reading-card account-empty-card">
+                    <strong>Nenhum livro em andamento</strong>
+                    <span>Quando você solicitar ou abrir uma leitura digital, ela aparecerá aqui.</span>
+                  </article>
+                `}
           </div>
 
           <div className="account-hub-block">
             <div className="account-block-heading">
               <div>
-                <h3>Recomendações para você</h3>
-                <p>Sugestões baseadas no que você já leu e no que faz sentido para o seu perfil.</p>
+                <h3>Fila de espera</h3>
+                <p>Você pode acompanhar sua posição e sair da fila quando quiser.</p>
+              </div>
+            </div>
+
+            ${userWaitlists.length > 0
+              ? html`
+                  <div className="account-waitlist-list">
+                    ${userWaitlists.map((entry) => {
+                      const book = books.find((item) => item.id === entry.bookId);
+                      return html`
+                        <article key=${entry.id} className="account-waitlist-card">
+                          <div>
+                            <strong>${book?.title || "Livro indisponível"}</strong>
+                            <p>${book?.author || "Biblioteca interna"}</p>
+                            <small>Adicionado em ${formatDate(entry.requestedAt)}</small>
+                          </div>
+                          <div className="account-waitlist-actions">
+                            <span className="account-soft-pill">Fila #${getWaitlistPosition(waitlists, entry.bookId, entry.userId)}</span>
+                            <button
+                              type="button"
+                              className="admin-secondary"
+                              onClick=${() => {
+                                const result = actions.removeWaitlistEntry(entry.id);
+                                setFeedback({
+                                  tone: result.success ? "success" : "error",
+                                  title: result.success ? "Fila atualizada" : "Não foi possível remover",
+                                  message: result.message
+                                });
+                              }}
+                            >
+                              Remover
+                            </button>
+                          </div>
+                        </article>
+                      `;
+                    })}
+                  </div>
+                `
+              : html`
+                  <article className="account-reading-card account-empty-card">
+                    <strong>Nenhum livro na fila de espera</strong>
+                    <span>Quando você entrar em uma fila, ela aparecerá nesta seção.</span>
+                  </article>
+                `}
+          </div>
+
+          <div className="account-hub-block">
+            <div className="account-block-heading">
+              <div>
+                <h3>Histórico</h3>
+                <p>Veja os livros que você já leu e o tempo de cada leitura.</p>
+              </div>
+            </div>
+
+            ${readLoans.length > 0
+              ? html`
+                  <div className="account-history-list">
+                    ${readLoans
+                      .slice()
+                      .sort((left, right) =>
+                        new Date(right.returnedAt || right.borrowedAt || 0).getTime() -
+                        new Date(left.returnedAt || left.borrowedAt || 0).getTime()
+                      )
+                      .map((loan) => {
+                        const book = books.find((item) => item.id === loan.bookId);
+                        return html`
+                          <article key=${loan.id} className="account-waitlist-card">
+                            <div>
+                              <strong>${book?.title || "Livro"}</strong>
+                              <p>${book?.author || "Biblioteca interna"}</p>
+                              <small>
+                                Retirada: ${formatDate(loan.borrowedAt || loan.requestedAt)} · Devolução: ${formatDate(loan.returnedAt)}
+                              </small>
+                            </div>
+                            <span className="account-soft-pill">
+                              ${calculateReadingTimeLabel(loan.borrowedAt, loan.returnedAt)}
+                            </span>
+                          </article>
+                        `;
+                      })}
+                  </div>
+                `
+              : html`
+                  <article className="account-reading-card account-empty-card">
+                    <strong>Nenhum livro lido ainda</strong>
+                    <span>Seu histórico vai aparecer aqui depois da primeira devolução ou leitura concluída.</span>
+                  </article>
+                `}
+          </div>
+
+          <div className="account-hub-block">
+            <div className="account-block-heading">
+              <div>
+                <h3>Favoritos</h3>
+                <p>Livros que você marcou para ler depois.</p>
               </div>
             </div>
 
             <div className="account-recommendations-grid">
-              ${personalizedRecommendations.length > 0
-                ? personalizedRecommendations.map(
+              ${favorites.length > 0
+                ? favorites.map(
                     (book) => html`
                       <article key=${book.id} className="account-recommendation-card">
                         <div className="account-recommendation-cover">
@@ -457,13 +494,12 @@ export function MyAccountPage({ currentUser, books, loans, waitlists = [], notif
                           </div>
                           <span>${book.author}</span>
                           <small>${book.category || "Biblioteca interna"}</small>
-                          <p>${book.recommendationReason}</p>
                           <button
                             type="button"
                             className="admin-primary"
                             onClick=${() => actions.toggleReadingList(currentUser.id, book.id)}
                           >
-                            Adicionar a minha lista
+                            Remover dos favoritos
                           </button>
                         </div>
                       </article>
@@ -471,8 +507,8 @@ export function MyAccountPage({ currentUser, books, loans, waitlists = [], notif
                   )
                 : html`
                     <article className="account-reading-card account-empty-card">
-                      <strong>Sem recomendações no momento</strong>
-                      <span>A Lumiar Flow vai sugerir leituras conforme você usar mais o sistema.</span>
+                      <strong>Sem favoritos no momento</strong>
+                      <span>Use a página de livros para salvar títulos para depois.</span>
                     </article>
                   `}
             </div>
@@ -526,40 +562,6 @@ function calculateAverageDays(loans) {
   return Math.round(durations.reduce((sum, value) => sum + value, 0) / durations.length);
 }
 
-function translateLoanStatusClass(status) {
-  switch (status) {
-    case "READY_FOR_PICKUP":
-      return "borrowed";
-    case "BORROWED":
-      return "borrowed";
-    case "RETURNED":
-      return "read";
-    case "REJECTED":
-      return "unavailable";
-    default:
-      return "available";
-  }
-}
-
-function translateLoanStatus(status) {
-  switch (status) {
-    case "READY_FOR_PICKUP":
-      return "Pronto para retirada";
-    case "BORROWED":
-      return "Emprestado";
-    case "RETURNED":
-      return "Devolvido";
-    case "PENDING_APPROVAL":
-      return "Aguardando aprovação";
-    case "REJECTED":
-      return "Solicitação negada";
-    case "EXPIRED":
-      return "Reserva expirada";
-    default:
-      return "Em andamento";
-  }
-}
-
 function formatDate(value) {
   if (!value) {
     return "-";
@@ -572,6 +574,57 @@ function formatDate(value) {
   }
 
   return date.toLocaleDateString("pt-BR");
+}
+
+function getLoanStatusTone(status) {
+  if (isLoanBorrowed(status)) {
+    return "borrowed";
+  }
+
+  if (isLoanPendingApproval(status)) {
+    return "pending";
+  }
+
+  if (String(status ?? "").trim().toUpperCase() === "READY_FOR_PICKUP") {
+    return "pending";
+  }
+
+  if (isLoanReturned(status)) {
+    return "read";
+  }
+
+  return "available";
+}
+
+function getRemainingDaysLabel(dueAt) {
+  if (!dueAt) {
+    return "-";
+  }
+
+  const diffDays = Math.ceil((new Date(dueAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) {
+    return `Atrasado há ${Math.abs(diffDays)} dia${Math.abs(diffDays) === 1 ? "" : "s"}`;
+  }
+
+  if (diffDays === 0) {
+    return "Devolver hoje";
+  }
+
+  return `${diffDays} dia${diffDays === 1 ? "" : "s"}`;
+}
+
+function calculateReadingTimeLabel(borrowedAt, returnedAt) {
+  if (!borrowedAt || !returnedAt) {
+    return "Tempo não disponível";
+  }
+
+  const diffDays = Math.max(
+    1,
+    Math.round((new Date(returnedAt).getTime() - new Date(borrowedAt).getTime()) / (1000 * 60 * 60 * 24))
+  );
+
+  return `${diffDays} dia${diffDays === 1 ? "" : "s"}`;
 }
 
 function translateAccessStatus(status) {

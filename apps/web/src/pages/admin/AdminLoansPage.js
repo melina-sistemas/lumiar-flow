@@ -1,6 +1,7 @@
 ﻿import React, { useMemo, useState } from "react";
 import htm from "htm";
 import { AdminPageLayout } from "../../components/AdminPageLayout.js";
+import { getLoanStatusLabel } from "../../features/books/loan-status.js";
 
 const html = htm.bind(React.createElement);
 
@@ -363,7 +364,7 @@ export function AdminLoansPage({ loans, books, users, actions }) {
                     <td>${book?.title ?? "-"}</td>
                     <td>
                       <span className=${`admin-badge status-${loan.status === "BORROWED" ? "active" : "inactive"}`}>
-                        ${loan.status}
+                        ${getLoanStatusLabel(loan.status)}
                       </span>
                     </td>
                     <td>
