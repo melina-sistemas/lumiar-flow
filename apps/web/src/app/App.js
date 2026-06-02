@@ -641,6 +641,7 @@ export function App() {
   const commonBookPageProps = {
     activeLoans,
     borrowerId,
+    isAuthenticated,
     loading: loadingCatalog,
     errorMessage: catalogError,
     users: displayUsers,
