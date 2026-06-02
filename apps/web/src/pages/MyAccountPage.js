@@ -7,6 +7,7 @@ import { createPlaceholderCover, resolveBookCoverSource } from "../services/goog
 import {
   getLoanStatusLabel,
   getWaitlistPosition,
+  isLoanActive,
   isLoanBorrowed,
   isLoanPendingApproval,
   isLoanReturned
@@ -38,8 +39,8 @@ export function MyAccountPage({ currentUser, books, loans, waitlists = [], notif
     [currentUser?.id, waitlists]
   );
 
-  const readLoans = userLoans.filter((loan) => loan.status === "RETURNED");
-  const activeLoans = userLoans.filter((loan) => loan.status !== "RETURNED");
+  const readLoans = userLoans.filter((loan) => isLoanReturned(loan.status));
+  const activeLoans = userLoans.filter((loan) => isLoanActive(loan.status));
   const averageDays = calculateAverageDays(readLoans);
   const currentLoan =
     userLoans.find(
@@ -521,12 +522,12 @@ export function MyAccountPage({ currentUser, books, loans, waitlists = [], notif
 }
 
 function getReadingListStatus(book, loans) {
-  const readLoan = loans.find((loan) => loan.bookId === book.id && loan.status === "RETURNED");
+  const readLoan = loans.find((loan) => loan.bookId === book.id && isLoanReturned(loan.status));
   if (readLoan) {
     return { key: "read", label: "Já lido" };
   }
 
-  const activeLoan = loans.find((loan) => loan.bookId === book.id && loan.status !== "RETURNED");
+  const activeLoan = loans.find((loan) => loan.bookId === book.id && isLoanActive(loan.status));
   if (activeLoan) {
     return { key: "borrowed", label: "Emprestado" };
   }

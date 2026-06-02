@@ -25,6 +25,7 @@ import { AdminMonitoringPage } from "../pages/admin/AdminMonitoringPage.js";
 import { AdminSettingsPage } from "../pages/admin/AdminSettingsPage.js";
 import { createDevelopmentPlanCatalog } from "../data/development-plan-data.js";
 import { resolveBrandAppearance, resolveThemeMode } from "../features/branding/brand-theme.js";
+import { isLoanActive } from "../features/books/loan-status.js";
 
 const html = htm.bind(React.createElement);
 
@@ -234,18 +235,11 @@ export function App() {
       ? displayUsers.find((user) => user.id === currentReaderId) ?? matchedSessionUser ?? activeAuthUser
       : null;
   const currentReaderLoans = canUseLibraryAccess
-    ? libraryLoans.filter((loan) => loan.userId === currentReaderId && loan.status !== "RETURNED")
+    ? libraryLoans.filter((loan) => loan.userId === currentReaderId && isLoanActive(loan.status))
     : [];
 
   const activeLoans = useMemo(
-    () =>
-      libraryLoans.filter(
-        (loan) =>
-          loan.status === "BORROWED" ||
-          (loan.status !== "returned" &&
-            loan.status !== "RETURNED" &&
-            !loan.returnedAt)
-      ),
+    () => libraryLoans.filter((loan) => isLoanActive(loan.status)),
     [libraryLoans]
   );
 

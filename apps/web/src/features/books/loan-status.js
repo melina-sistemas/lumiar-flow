@@ -19,7 +19,7 @@ export function normalizeLoanStatus(status) {
   switch (normalized) {
     case "DISPONIVEL":
     case "AVAILABLE":
-      case "EXPIRED":
+    case "EXPIRED":
       return "DISPONIVEL";
     case "READY_FOR_PICKUP":
       return "AGUARDANDO_FILA";
@@ -29,6 +29,7 @@ export function normalizeLoanStatus(status) {
       return "PENDENTE_APROVACAO";
     case "BORROWED":
     case "ACTIVE":
+    case "OVERDUE":
     case "EMPRESTADO":
     case "RETURN_REQUESTED":
       return "EMPRESTADO";
@@ -82,6 +83,15 @@ export function isLoanPendingApproval(status) {
 
 export function isLoanReturned(status) {
   return normalizeLoanStatus(status) === "DEVOLVIDO";
+}
+
+export function isLoanActive(status) {
+  const normalized = normalizeLoanStatus(status);
+  return (
+    normalized === "PENDENTE_APROVACAO" ||
+    normalized === "EMPRESTADO" ||
+    normalized === "AGUARDANDO_FILA"
+  );
 }
 
 export function isWaitlistEntryActive(entry) {
