@@ -892,6 +892,7 @@ function createAuthenticatedRepository(repository, adminStateStore) {
       const adminUser = findUserRecord(currentState.state.users, userId);
 
       if (adminUser) {
+        await repository.updateUser(adminUser);
         return adminUser;
       }
 
@@ -921,10 +922,7 @@ function createAuthenticatedRepository(repository, adminStateStore) {
         users
       });
 
-      const repositoryUser = await repository.findUserById(user.id);
-      if (repositoryUser) {
-        await repository.updateUser(user);
-      }
+      await repository.updateUser(user);
     },
     async updateBook(book) {
       return repository.updateBook(book);

@@ -60,7 +60,7 @@ export class SupabaseLoanRepository {
   }
 
   async updateUser(user) {
-    await this.update("users", user.id, mapUserToRow(user));
+    await this.upsert("users", mapUserToRow(user), "id");
   }
 
   async updateBook(book) {
@@ -108,12 +108,13 @@ export class SupabaseLoanRepository {
     }
   }
 
-  async upsert(table, payload) {
+  async upsert(table, payload, conflictTarget = "id") {
     await this.request(`/rest/v1/${table}`, {
       method: "POST",
       headers: {
         Prefer: "resolution=merge-duplicates,return=representation"
       },
+      query: { on_conflict: conflictTarget },
       body: JSON.stringify(payload)
     });
   }
@@ -129,7 +130,8 @@ export class SupabaseLoanRepository {
   }
 
   async request(path, init) {
-    const response = await fetch(`${this.config.url}${path}`, {
+    const query = init?.query ? `?${new URLSearchParams(init.query).toString()}` : "";
+    const response = await fetch(`${this.config.url}${path}${query}`, {
       ...init,
       headers: {
         apikey: this.config.serviceRoleKey,
