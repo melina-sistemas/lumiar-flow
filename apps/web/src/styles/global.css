@@ -153,6 +153,109 @@ body[data-brand-theme="dark"] .branding-reset-button {
   border-color: var(--border);
 }
 
+body[data-brand-theme="dark"] {
+  color-scheme: dark;
+}
+
+body[data-brand-theme="dark"] :is(
+  .header-profile-popover,
+  .header-notification-popover,
+  .dropdown,
+  .admin-filters-panel,
+  .admin-modal,
+  .reader-empty-state,
+  .account-summary-card,
+  .account-reading-card,
+  .account-recommendation-card,
+  .account-hub-block,
+  .user-tile,
+  .score-row,
+  .ranking-row,
+  .admin-recommended-book-card,
+  .admin-history-card,
+  .book-modal,
+  .modal-borrow-panel,
+  .premium-access-note,
+  .branding-upload-card,
+  .branding-summary-card
+) {
+  background: linear-gradient(180deg, #102033 0%, #0d1727 100%);
+  color: var(--text);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+body[data-brand-theme="dark"] .account-overview-block {
+  background: linear-gradient(135deg, rgba(6, 147, 227, 0.14), rgba(13, 23, 39, 0.98));
+}
+
+body[data-brand-theme="dark"] .account-overview-copy h3,
+body[data-brand-theme="dark"] .account-block-heading h3,
+body[data-brand-theme="dark"] .account-summary-card strong,
+body[data-brand-theme="dark"] .account-reading-card strong,
+body[data-brand-theme="dark"] .account-recommendation-card strong,
+body[data-brand-theme="dark"] .account-hub-block strong,
+body[data-brand-theme="dark"] .user-tile strong,
+body[data-brand-theme="dark"] .score-row strong,
+body[data-brand-theme="dark"] .ranking-row strong,
+body[data-brand-theme="dark"] .admin-recommended-book-card strong,
+body[data-brand-theme="dark"] .admin-history-card strong {
+  color: var(--text);
+}
+
+body[data-brand-theme="dark"] .account-overview-copy p,
+body[data-brand-theme="dark"] .account-block-heading p,
+body[data-brand-theme="dark"] .account-summary-card span,
+body[data-brand-theme="dark"] .account-summary-card small,
+body[data-brand-theme="dark"] .account-reading-card span,
+body[data-brand-theme="dark"] .account-reading-card small,
+body[data-brand-theme="dark"] .account-recommendation-card span,
+body[data-brand-theme="dark"] .account-recommendation-card small,
+body[data-brand-theme="dark"] .account-hub-block span,
+body[data-brand-theme="dark"] .account-hub-block small,
+body[data-brand-theme="dark"] .user-tile span,
+body[data-brand-theme="dark"] .score-row span,
+body[data-brand-theme="dark"] .ranking-row span,
+body[data-brand-theme="dark"] .admin-recommended-book-card p,
+body[data-brand-theme="dark"] .admin-history-card p,
+body[data-brand-theme="dark"] .reader-empty-state,
+body[data-brand-theme="dark"] .reader-empty-state p {
+  color: var(--text-soft);
+}
+
+body[data-brand-theme="dark"] :is(
+  .admin-filter-search input,
+  .admin-filters-row select,
+  .admin-users-filters-list select,
+  .admin-users-filter-strip select,
+  .admin-form input,
+  .admin-form select,
+  .admin-form textarea,
+  .admin-table input,
+  .admin-table select,
+  .account-field input,
+  .report-period-filter-fields input,
+  .auth-form input
+) {
+  background: rgba(15, 23, 42, 0.88);
+  color: var(--text);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+body[data-brand-theme="dark"] :is(
+  .admin-filter-search input::placeholder,
+  .admin-filters-row select::placeholder,
+  .admin-users-filters-list select::placeholder,
+  .admin-users-filter-strip select::placeholder,
+  .admin-form input::placeholder,
+  .admin-form textarea::placeholder,
+  .admin-table input::placeholder,
+  .account-field input::placeholder,
+  .report-period-filter-fields input::placeholder,
+  .auth-form input::placeholder
+) {
+  color: var(--muted);
+}
+
 * {
   box-sizing: border-box;
 }
