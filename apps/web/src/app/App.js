@@ -363,8 +363,6 @@ export function App() {
     }
 
     if (!matchedSessionUser) {
-      setAuthUser(null);
-      navigate("/entrar", { replace: true });
       return;
     }
 
