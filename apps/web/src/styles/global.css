@@ -4710,6 +4710,29 @@ textarea {
   color: var(--muted);
 }
 
+.book-modal-notes {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.book-modal-notes span {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.book-modal-notes small {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.book-modal-notes textarea {
+  width: 100%;
+  min-height: 122px;
+  resize: vertical;
+}
+
 .modal-borrow-panel.muted {
   background: rgba(123, 135, 145, 0.08);
   border-color: rgba(123, 135, 145, 0.14);

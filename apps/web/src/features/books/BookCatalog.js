@@ -205,7 +205,7 @@ export function BookCatalog({
             nextLoan?.status === "READY_FOR_PICKUP" ? nextLoan.readyUntil || nextLoan.dueAt : nextLoan?.dueAt,
             now
           ),
-          summary: buildSummary(book)
+          summary: String(book.summary ?? "").trim() || buildSummary(book)
         };
       }),
     [activeLoans, borrowerId, books, currentReader, currentReaderLoans, now, waitlists]
@@ -926,85 +926,6 @@ export function BookCatalog({
                         `
                       : null}
 
-                    ${modalBook.type === "physical" && currentReader?.accessStatus === "approved"
-                      ? html`
-                          <div className="modal-borrow-panel">
-                            <strong>
-                              ${modalBook.currentReaderWaitlist
-                                ? `Você já está na fila #${modalBook.currentReaderQueuePosition}`
-                                : modalBook.hasActiveBorrowedLoan
-                                ? "Você já possui um livro emprestado"
-                                : modalBook.isOutOfStock
-                                  ? "Livro em circulação"
-                                  : "Solicitação de empréstimo"}
-                            </strong>
-                            <span>
-                              ${modalBook.currentReaderWaitlist
-                                ? "Seu lugar já está reservado nesta fila. Você pode aguardar a liberação ou sair da fila a qualquer momento."
-                                : modalBook.hasActiveBorrowedLoan
-                                ? "Para seguir com outro livro físico, é preciso devolver o atual. Se preferir, você pode entrar na fila de espera deste título."
-                                : modalBook.isOutOfStock
-                                  ? "Quando este exemplar voltar ao acervo, você pode continuar pela fila de espera."
-                                  : "Revise os dados e envie a solicitação para aprovação do administrador."}
-                            </span>
-                            ${modalBook.currentReaderWaitlist || modalBook.hasActiveBorrowedLoan || modalBook.isOutOfStock
-                              ? html`
-                                  <div className="modal-action-stack">
-                                    <button
-                                      type="button"
-                                      disabled=${busyBookId === modalBook.id}
-                                      onClick=${(event) => handleJoinQueue(modalBook, event)}
-                                    >
-                                      ${busyBookId === modalBook.id
-                                        ? "Processando..."
-                                        : modalBook.currentReaderWaitlist
-                                          ? `Na fila #${modalBook.currentReaderQueuePosition}`
-                                          : "Entrar na fila"}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="book-read-button"
-                                      onClick=${() => {
-                                        if (modalBook.currentReaderWaitlist) {
-                                          const result = loanActions?.removeWaitlistEntry?.(modalBook.currentReaderWaitlist.id);
-                                          if (result?.message) {
-                                            setFlash({
-                                              type: result.success ? "success" : "error",
-                                              message: result.message
-                                            });
-                                          }
-                                        }
-                                        setModalBookId("");
-                                      }}
-                                    >
-                                      ${modalBook.currentReaderWaitlist ? "Sair da fila" : "Cancelar"}
-                                    </button>
-                                  </div>
-                                `
-                              : html`
-                                  <label className="book-modal-notes">
-                                    <span>Observações opcionais</span>
-                                    <textarea
-                                      rows="3"
-                                      value=${loanNotes}
-                                      onInput=${(event) => setLoanNotes(event.target.value)}
-                                      placeholder="Ex.: vou retirar no balcão no fim do expediente."
-                                    ></textarea>
-                                  </label>
-                                  <button
-                                    type="button"
-                                    disabled=${busyBookId === modalBook.id}
-                                    onClick=${(event) => handleBorrow(modalBook, event)}
-                                  >
-                                    ${busyBookId === modalBook.id
-                                      ? "Processando..."
-                                      : "Solicitar empréstimo"}
-                                  </button>
-                                `}
-                          </div>
-                        `
-                      : null}
-
                     ${modalBook.isPremium
                       ? html`
                           <div className=${`premium-access-note ${canAccessPremiumBook ? "granted" : "blocked"}`}>
@@ -1045,7 +966,7 @@ export function BookCatalog({
                             </button>
                           </div>
                         `
-                      : modalBook.type === "digital"
+                    : modalBook.type === "digital"
                       ? html`
                           <div className="modal-borrow-panel">
                             <strong>Ler agora</strong>
@@ -1062,9 +983,6 @@ export function BookCatalog({
                             </button>
                           </div>
                         `
-                      : modalBook.isOutOfStock || modalBook.hasActiveBorrowedLoan
-                      || modalBook.currentReaderWaitlist
-                      ? null
                       : modalBook.type === "physical" && !canRequestPhysicalLoan
                       ? html`
                           <div className="modal-borrow-panel muted">
@@ -1074,6 +992,61 @@ export function BookCatalog({
                               leituras digitais permitidas, mas o empréstimo físico só fica disponível
                               após a validação do administrador.
                             </span>
+                          </div>
+                        `
+                      : modalBook.type === "physical" &&
+                        (modalBook.currentReaderWaitlist ||
+                          modalBook.hasActiveBorrowedLoan ||
+                          modalBook.isOutOfStock)
+                      ? html`
+                          <div className="modal-borrow-panel">
+                            <strong>
+                              ${modalBook.currentReaderWaitlist
+                                ? `Você já está na fila #${modalBook.currentReaderQueuePosition}`
+                                : modalBook.hasActiveBorrowedLoan
+                                ? "Você já possui um livro emprestado"
+                                : "Livro em circulação"}
+                            </strong>
+                            <span>
+                              ${modalBook.currentReaderWaitlist
+                                ? "Seu lugar já está reservado nesta fila. Você pode aguardar a liberação ou sair da fila a qualquer momento."
+                                : modalBook.hasActiveBorrowedLoan
+                                ? "Para seguir com outro livro físico, é preciso devolver o atual. Se preferir, você pode entrar na fila de espera deste título."
+                                : "Quando este exemplar voltar ao acervo, você pode continuar pela fila de espera."}
+                            </span>
+                            <div className="modal-action-stack">
+                              <button
+                                type="button"
+                                disabled=${busyBookId === modalBook.id}
+                                onClick=${(event) => handleJoinQueue(modalBook, event)}
+                              >
+                                ${busyBookId === modalBook.id
+                                  ? "Processando..."
+                                  : modalBook.currentReaderWaitlist
+                                    ? `Na fila #${modalBook.currentReaderQueuePosition}`
+                                    : "Entrar na fila"}
+                              </button>
+                              <button
+                                type="button"
+                                className="book-read-button"
+                                onClick=${() => {
+                                  if (modalBook.currentReaderWaitlist) {
+                                    const result = loanActions?.removeWaitlistEntry?.(
+                                      modalBook.currentReaderWaitlist.id
+                                    );
+                                    if (result?.message) {
+                                      setFlash({
+                                        type: result.success ? "success" : "error",
+                                        message: result.message
+                                      });
+                                    }
+                                  }
+                                  setModalBookId("");
+                                }}
+                              >
+                                ${modalBook.currentReaderWaitlist ? "Sair da fila" : "Cancelar"}
+                              </button>
+                            </div>
                           </div>
                         `
                       : html`
@@ -1086,8 +1059,12 @@ export function BookCatalog({
                             </span>
                             <label className="book-modal-notes">
                               <span>Observações opcionais</span>
+                              <small>
+                                Use este campo para incluir um recado curto, como horário de retirada
+                                ou informação útil para o administrador.
+                              </small>
                               <textarea
-                                rows="3"
+                                rows="5"
                                 value=${loanNotes}
                                 onInput=${(event) => setLoanNotes(event.target.value)}
                                 placeholder="Ex.: vou retirar no balcão no fim do expediente."
