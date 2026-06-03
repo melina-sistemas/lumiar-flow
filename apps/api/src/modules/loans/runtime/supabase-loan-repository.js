@@ -240,11 +240,21 @@ function mapLoanToRow(loan) {
     level_at_loan: loan.levelAtLoan,
     borrowed_at: loan.borrowedAt,
     due_at: loan.dueAt,
-    status: loan.status,
+    status: mapLoanStatusToDatabase(loan.status),
     returned_at: loan.returnedAt ?? null,
     return_record_id: loan.returnRecordId ?? null,
     updated_at: new Date().toISOString()
   };
+}
+
+function mapLoanStatusToDatabase(status) {
+  const normalized = String(status ?? "").trim().toUpperCase();
+
+  if (normalized === "RETURNED" || normalized === "DEVOLVIDO") {
+    return "returned";
+  }
+
+  return "active";
 }
 
 function mapReturn(row) {
