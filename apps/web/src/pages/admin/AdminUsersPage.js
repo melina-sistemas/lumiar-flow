@@ -25,14 +25,16 @@ export function AdminUsersPage({ users, loans, books, returns = [], actions }) {
     cpf: "",
     company: "",
     department: "",
-    role: "user",
+    role: "staff",
     level: "bronze"
   });
 
   const filteredUsers = useMemo(
     () =>
       users
-        .filter((user) => (roleFilter === "all" ? true : user.role === roleFilter))
+        .filter((user) =>
+          roleFilter === "all" ? true : normalizeRoleForUi(user.role) === roleFilter
+        )
         .filter((user) => (levelFilter === "all" ? true : user.level === levelFilter))
         .filter((user) => (statusFilter === "all" ? true : user.accessStatus === statusFilter))
         .sort((left, right) => left.name.localeCompare(right.name, "pt-BR")),
@@ -105,7 +107,7 @@ export function AdminUsersPage({ users, loans, books, returns = [], actions }) {
                         setDraftFilters((current) => ({ ...current, role: event.target.value }))}
                     >
                       <option value="all">Todos</option>
-                      <option value="user">Usuário</option>
+                      <option value="staff">Usuário</option>
                       <option value="admin">Admin</option>
                     </select>
                   </label>
@@ -348,7 +350,7 @@ export function AdminUsersPage({ users, loans, books, returns = [], actions }) {
                   cpf: "",
                   company: "",
                   department: "",
-                  role: "user",
+                  role: "staff",
                   level: "bronze"
                 });
                 setShowCreateModal(false);
@@ -594,7 +596,7 @@ function UserProfileModal({ user, books, history, actions, onClose }) {
                   value=${user.role}
                   onChange=${(event) => actions.updateUser(user.id, { role: event.target.value })}
                 >
-                  <option value="user">Usuário</option>
+                  <option value="staff">Usuário</option>
                   <option value="admin">Admin</option>
                 </select>
               </label>
@@ -915,6 +917,10 @@ function buildUserHistory({ user, loans, books, returns }) {
 
 function translateRole(role) {
     return role === "admin" ? "Admin" : "Usuário";
+}
+
+function normalizeRoleForUi(role) {
+  return String(role ?? "").trim().toLowerCase() === "admin" ? "admin" : "staff";
 }
 
 function translateLevel(level) {

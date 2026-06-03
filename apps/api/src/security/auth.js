@@ -230,7 +230,7 @@ export function normalizeUserStatus(status) {
 }
 
 export function normalizeUserRole(role) {
-  return String(role ?? "").trim().toLowerCase() === "admin" ? "admin" : "user";
+  return String(role ?? "").trim().toLowerCase() === "admin" ? "admin" : "staff";
 }
 
 export function normalizeUserLevel(level) {
