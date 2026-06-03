@@ -8,10 +8,10 @@ export function createAdminApiClient(baseUrl) {
       });
     },
 
-    async syncState(state) {
+    async syncState(input) {
       return request(`${baseUrl}/admin/state`, {
         method: "POST",
-        body: JSON.stringify({ state })
+        body: JSON.stringify(input)
       });
     },
 

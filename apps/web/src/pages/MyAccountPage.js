@@ -10,7 +10,8 @@ import {
   isLoanActive,
   isLoanBorrowed,
   isLoanPendingApproval,
-  isLoanReturned
+  isLoanReturned,
+  normalizeLoanStatus
 } from "../features/books/loan-status.js";
 
 const html = htm.bind(React.createElement);
@@ -47,7 +48,9 @@ export function MyAccountPage({ currentUser, books, loans, waitlists = [], notif
       (loan) =>
         isLoanBorrowed(loan.status) ||
         isLoanPendingApproval(loan.status) ||
-        String(loan.status ?? "").trim().toUpperCase() === "READY_FOR_PICKUP"
+        ["AGUARDANDO_RETIRADA", "AGUARDANDO_CONFIRMACAO"].includes(
+          normalizeLoanStatus(loan.status)
+        )
     ) ?? null;
   const currentBook = currentLoan
     ? books.find((book) => book.id === currentLoan.bookId) ?? null
@@ -336,7 +339,7 @@ export function MyAccountPage({ currentUser, books, loans, waitlists = [], notif
                         </div>
                         <span>${currentBook.author}</span>
                         <small>
-                          ${currentLoan.status === "PENDING_APPROVAL"
+                          ${isLoanPendingApproval(currentLoan.status)
                             ? `Solicitado em ${formatDate(currentLoan.requestedAt)}`
                             : `Retirada em ${formatDate(currentLoan.borrowedAt || currentLoan.requestedAt)} · Devolução prevista ${formatDate(currentLoan.dueAt)}`}
                         </small>
@@ -586,7 +589,7 @@ function getLoanStatusTone(status) {
     return "pending";
   }
 
-  if (String(status ?? "").trim().toUpperCase() === "READY_FOR_PICKUP") {
+  if (["AGUARDANDO_RETIRADA", "AGUARDANDO_CONFIRMACAO"].includes(normalizeLoanStatus(status))) {
     return "pending";
   }
 

@@ -24,6 +24,7 @@ export function BooksPage({
   selectedBookId,
   onSelectBook,
   loanActions,
+  loanApi,
   currentReaderLoans,
   onLoginRequest,
   onAccountRequest
@@ -135,6 +136,7 @@ export function BooksPage({
           selectedBookId=${selectedBookId}
           onSelectBook=${onSelectBook}
           loanActions=${loanActions}
+          loanApi=${loanApi}
           currentReaderLoans=${currentReaderLoans}
           currentReader=${currentReader}
           users=${users}

@@ -13,12 +13,15 @@ export async function createLoan(input, dependencies) {
   }
 
   const book = await repository.findBookById(input.bookId);
+  const isDigitalRequest = String(input.type ?? book?.type ?? "").trim().toLowerCase() === "digital";
 
   if (!book) {
     return createError("book_not_found", "Livro nao encontrado.");
   }
 
-  const permission = canCreateLoan(user, book);
+  const permission = isDigitalRequest
+    ? { allowed: true }
+    : canCreateLoan(user, book);
 
   if (!permission.allowed) {
     return createError(
@@ -35,20 +38,21 @@ export async function createLoan(input, dependencies) {
     levelAtLoan: book.level,
     borrowedAt,
     dueAt: calculateDueDate(book.level, borrowedAt),
-    status: "active"
+    status: isDigitalRequest ? "EMPRESTADO" : "PENDENTE_APROVACAO"
   };
-  const updatedUser = {
-    ...user,
-    activeLoanId: loan.id
-  };
-  const updatedBook = {
-    ...book,
-    availableCopies: book.availableCopies - 1
-  };
+  const updatedUser = isDigitalRequest
+    ? user
+    : {
+        ...user,
+        activeLoanId: loan.id
+      };
+  const updatedBook = book;
 
   await repository.saveLoan(loan);
   await repository.updateUser(updatedUser);
-  await repository.updateBook(updatedBook);
+  if (!isDigitalRequest) {
+    await repository.updateBook(updatedBook);
+  }
 
   return {
     success: true,

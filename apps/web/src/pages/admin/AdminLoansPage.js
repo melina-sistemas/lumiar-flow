@@ -1,7 +1,13 @@
 ﻿import React, { useMemo, useState } from "react";
 import htm from "htm";
 import { AdminPageLayout } from "../../components/AdminPageLayout.js";
-import { getLoanStatusLabel } from "../../features/books/loan-status.js";
+import {
+  getLoanStatusLabel,
+  isLoanBorrowed,
+  isLoanPendingApproval,
+  isLoanReturned,
+  normalizeLoanStatus
+} from "../../features/books/loan-status.js";
 
 const html = htm.bind(React.createElement);
 
@@ -24,7 +30,7 @@ export function AdminLoansPage({ loans, books, users, actions }) {
   const pendingLoans = useMemo(
     () =>
       loans
-        .filter((loan) => loan.status !== "RETURNED")
+        .filter((loan) => !isLoanReturned(loan.status))
         .filter((loan) => {
           const user = users.find((item) => item.id === loan.userId);
           const book = books.find((item) => item.id === loan.bookId);
@@ -33,7 +39,7 @@ export function AdminLoansPage({ loans, books, users, actions }) {
             `${user?.name ?? ""} ${book?.title ?? ""}`
               .toLowerCase()
               .includes(search.trim().toLowerCase());
-          const matchesStatus = statusFilter === "all" || loan.status === statusFilter;
+          const matchesStatus = statusFilter === "all" || normalizeLoanStatus(loan.status) === statusFilter;
 
           return matchesSearch && matchesStatus;
         }),
@@ -41,10 +47,12 @@ export function AdminLoansPage({ loans, books, users, actions }) {
   );
   const summary = useMemo(
     () => ({
-      pending: loans.filter((loan) => loan.status === "PENDING_APPROVAL").length,
-      ready: loans.filter((loan) => loan.status === "READY_FOR_PICKUP").length,
-      borrowed: loans.filter((loan) => loan.status === "BORROWED").length,
-      returned: loans.filter((loan) => loan.status === "RETURNED").length
+      pending: loans.filter((loan) => isLoanPendingApproval(loan.status)).length,
+      ready: loans.filter((loan) =>
+        ["AGUARDANDO_RETIRADA", "AGUARDANDO_CONFIRMACAO"].includes(normalizeLoanStatus(loan.status))
+      ).length,
+      borrowed: loans.filter((loan) => isLoanBorrowed(loan.status)).length,
+      returned: loans.filter((loan) => isLoanReturned(loan.status)).length
     }),
     [loans]
   );
@@ -54,7 +62,7 @@ export function AdminLoansPage({ loans, books, users, actions }) {
       type="button"
       className="admin-primary"
       onClick=${() => {
-        const pending = pendingLoans.filter((loan) => loan.status === "PENDING_APPROVAL");
+        const pending = pendingLoans.filter((loan) => isLoanPendingApproval(loan.status));
         let approved = 0;
 
         for (const loan of pending) {
@@ -102,10 +110,10 @@ export function AdminLoansPage({ loans, books, users, actions }) {
 
   const statusOptions = [
     { value: "all", label: "Todos os status" },
-    { value: "PENDING_APPROVAL", label: "Pendentes" },
-    { value: "READY_FOR_PICKUP", label: "Prontos para retirada" },
-    { value: "BORROWED", label: "Emprestados" },
-    { value: "RETURNED", label: "Devolvidos" }
+    { value: "PENDENTE_APROVACAO", label: "Pendentes" },
+    { value: "AGUARDANDO_RETIRADA", label: "Aguardando retirada" },
+    { value: "EMPRESTADO", label: "Emprestados" },
+    { value: "DEVOLVIDO", label: "Devolvidos" }
   ];
 
   const filters = html`
@@ -363,7 +371,9 @@ export function AdminLoansPage({ loans, books, users, actions }) {
                     <td>${user?.name ?? "-"}</td>
                     <td>${book?.title ?? "-"}</td>
                     <td>
-                      <span className=${`admin-badge status-${loan.status === "BORROWED" ? "active" : "inactive"}`}>
+                      <span className=${`admin-badge status-${
+                        isLoanBorrowed(loan.status) ? "active" : "inactive"
+                      }`}>
                         ${getLoanStatusLabel(loan.status)}
                       </span>
                     </td>
@@ -405,7 +415,7 @@ export function AdminLoansPage({ loans, books, users, actions }) {
                       />
                     </td>
                     <td className="admin-table-actions">
-                      ${loan.status === "PENDING_APPROVAL"
+                      ${isLoanPendingApproval(loan.status)
                         ? html`
                             <button
                               type="button"
@@ -426,7 +436,9 @@ export function AdminLoansPage({ loans, books, users, actions }) {
                           `
                         : null}
 
-                      ${loan.status === "READY_FOR_PICKUP"
+                      ${["AGUARDANDO_RETIRADA", "AGUARDANDO_CONFIRMACAO"].includes(
+                        normalizeLoanStatus(loan.status)
+                      )
                         ? html`
                             <button
                               type="button"
@@ -439,7 +451,7 @@ export function AdminLoansPage({ loans, books, users, actions }) {
                           `
                         : null}
 
-                      ${loan.status === "BORROWED"
+                      ${isLoanBorrowed(loan.status)
                         ? html`
                             <button
                               type="button"

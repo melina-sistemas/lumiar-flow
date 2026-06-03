@@ -7,7 +7,8 @@ import {
   getWaitlistEntry,
   getWaitlistPosition,
   isLoanBorrowed,
-  isLoanPendingApproval
+  isLoanPendingApproval,
+  normalizeLoanStatus
 } from "./loan-status.js";
 
 const html = htm.bind(React.createElement);
@@ -40,6 +41,7 @@ export function BookCatalog({
   selectedBookId,
   onSelectBook,
   loanActions,
+  loanApi,
   currentReaderLoans = [],
   currentReader = null,
   users = [],
@@ -145,8 +147,9 @@ export function BookCatalog({
         const hasActiveBorrowedLoan = currentReaderLoans.some(
           (loan) =>
             loan.type !== "digital" &&
-            (isLoanBorrowed(loan.status) ||
-              String(loan.status ?? "").trim().toUpperCase() === "READY_FOR_PICKUP")
+            ["EMPRESTADO", "AGUARDANDO_RETIRADA", "AGUARDANDO_CONFIRMACAO"].includes(
+              normalizeLoanStatus(loan.status)
+            )
         );
         const canRequestPhysicalLoan =
           currentReader?.accessStatus === "approved" && !hasActiveBorrowedLoan;
@@ -156,11 +159,11 @@ export function BookCatalog({
         const currentBookStatus = book.type === "digital"
           ? "DISPONIVEL"
           : currentReaderLoan
-          ? currentReaderLoan.status
+          ? normalizeLoanStatus(currentReaderLoan.status)
           : borrowedLoan
-          ? borrowedLoan.status
+          ? normalizeLoanStatus(borrowedLoan.status)
           : pendingLoan
-          ? pendingLoan.status
+          ? normalizeLoanStatus(pendingLoan.status)
           : bookWaitlistCount > 0
           ? "AGUARDANDO_FILA"
           : isOutOfStock
@@ -201,10 +204,14 @@ export function BookCatalog({
           statusLabel,
           statusKey: !book.isActive ? "indisponivel" : String(currentBookStatus || "").toLowerCase(),
           requestLabel,
-          returnText: buildReturnCountdown(
-            nextLoan?.status === "READY_FOR_PICKUP" ? nextLoan.readyUntil || nextLoan.dueAt : nextLoan?.dueAt,
-            now
-          ),
+        returnText: buildReturnCountdown(
+          ["AGUARDANDO_RETIRADA", "AGUARDANDO_CONFIRMACAO"].includes(
+            normalizeLoanStatus(nextLoan?.status)
+          )
+            ? nextLoan.readyUntil || nextLoan.dueAt
+            : nextLoan?.dueAt,
+          now
+        ),
           summary: String(book.summary ?? "").trim() || buildSummary(book)
         };
       }),
@@ -429,7 +436,17 @@ export function BookCatalog({
     };
   }, [readerAnimating, readerPage]);
 
-  function handleOpenModal(bookId) {
+  async function handleOpenModal(bookId, event) {
+    event?.stopPropagation?.();
+
+    if (loanActions?.refreshState) {
+      try {
+        await loanActions.refreshState();
+      } catch {
+        // Keep the cached state if a refresh is temporarily unavailable.
+      }
+    }
+
     onSelectBook?.(bookId);
     setModalBookId(bookId);
   }
@@ -548,12 +565,23 @@ export function BookCatalog({
 
     try {
       const requestedAt = new Date().toISOString();
-      const response = await Promise.resolve(loanActions?.requestLoan({
-        userId: borrowerId,
-        bookId: book.id,
-        requestedAt,
-        notes: loanNotes.trim()
-      }));
+      const response = loanApi?.createLoan
+        ? await loanApi.createLoan({
+            userId: borrowerId,
+            bookId: book.id,
+            type: book.type,
+            requestedAt,
+            notes: loanNotes.trim()
+          })
+        : await Promise.resolve(
+            loanActions?.requestLoan({
+              userId: borrowerId,
+              bookId: book.id,
+              type: book.type,
+              requestedAt,
+              notes: loanNotes.trim()
+            })
+          );
 
       if (!response?.success) {
         setFlash({
@@ -605,12 +633,17 @@ export function BookCatalog({
     setFlash(null);
 
     try {
-      const response = await Promise.resolve(
-        loanActions?.joinWaitlist?.({
-          userId: borrowerId,
-          bookId: book.id
-        })
-      );
+      const response = loanApi?.joinWaitlist
+        ? await loanApi.joinWaitlist({
+            userId: borrowerId,
+            bookId: book.id
+          })
+        : await Promise.resolve(
+            loanActions?.joinWaitlist?.({
+              userId: borrowerId,
+              bookId: book.id
+            })
+          );
 
       if (!response?.success) {
         setFlash({
@@ -624,7 +657,14 @@ export function BookCatalog({
         type: "success",
         message: response.message
       });
-      setModalBookId("");
+
+      if (loanActions?.refreshState) {
+        try {
+          await Promise.resolve(loanActions.refreshState());
+        } catch {
+          // Keep the optimistic success state even if the refresh fails momentarily.
+        }
+      }
     } catch (error) {
       setFlash({
         type: "error",
@@ -647,7 +687,11 @@ export function BookCatalog({
     }
 
     const targetLoan = currentReaderLoans.find(
-      (loan) => loan.bookId === book.id && loan.status === "READY_FOR_PICKUP"
+      (loan) =>
+        loan.bookId === book.id &&
+        ["AGUARDANDO_RETIRADA", "AGUARDANDO_CONFIRMACAO"].includes(
+          normalizeLoanStatus(loan.status)
+        )
     );
 
     if (!targetLoan) {
@@ -662,7 +706,11 @@ export function BookCatalog({
     setFlash(null);
 
     try {
-      const response = await Promise.resolve(loanActions?.confirmPickup(targetLoan.id));
+      const response = await Promise.resolve(
+        loanApi?.confirmPickup
+          ? loanApi.confirmPickup(targetLoan.id)
+          : loanActions?.confirmPickup(targetLoan.id)
+      );
 
       if (!response?.success) {
         setFlash({
@@ -995,24 +1043,45 @@ export function BookCatalog({
                           </div>
                         `
                       : modalBook.type === "physical" &&
+                        modalBook.currentReaderLoan &&
+                        ["AGUARDANDO_RETIRADA", "AGUARDANDO_CONFIRMACAO"].includes(
+                          normalizeLoanStatus(modalBook.currentReaderLoan.status)
+                        )
+                      ? html`
+                          <div className="modal-borrow-panel">
+                            <strong>Solicitação de empréstimo</strong>
+                            <span>
+                              Seu empréstimo foi aprovado. Confirme a retirada para iniciar o prazo
+                              de devolução.
+                            </span>
+                            <small>
+                              Prazo previsto: ${formatDate(modalBook.currentReaderLoan.dueAt)}
+                            </small>
+                            <button
+                              type="button"
+                              className="book-read-button"
+                              disabled=${busyBookId === modalBook.id}
+                              onClick=${(event) => handleConfirmPickup(modalBook, event)}
+                            >
+                              ${busyBookId === modalBook.id
+                                ? "Confirmando..."
+                                : "Confirmar retirada"}
+                            </button>
+                          </div>
+                        `
+                      : modalBook.type === "physical" &&
                         (modalBook.currentReaderWaitlist ||
                           modalBook.hasActiveBorrowedLoan ||
                           modalBook.isOutOfStock)
                       ? html`
                           <div className="modal-borrow-panel">
-                            <strong>
-                              ${modalBook.currentReaderWaitlist
-                                ? `Você já está na fila #${modalBook.currentReaderQueuePosition}`
-                                : modalBook.hasActiveBorrowedLoan
-                                ? "Você já possui um livro emprestado"
-                                : "Livro em circulação"}
-                            </strong>
+                            <strong>Solicitação de empréstimo</strong>
                             <span>
                               ${modalBook.currentReaderWaitlist
-                                ? "Seu lugar já está reservado nesta fila. Você pode aguardar a liberação ou sair da fila a qualquer momento."
+                                ? `Você entrou na fila de espera na posição #${modalBook.currentReaderQueuePosition}. Seu lugar já está reservado nesta fila. Você pode aguardar a liberação ou sair da fila a qualquer momento.`
                                 : modalBook.hasActiveBorrowedLoan
-                                ? "Para seguir com outro livro físico, é preciso devolver o atual. Se preferir, você pode entrar na fila de espera deste título."
-                                : "Quando este exemplar voltar ao acervo, você pode continuar pela fila de espera."}
+                                ? "Você já possui um livro emprestado. Para seguir com outro livro físico, é preciso devolver o atual. Se preferir, você pode entrar na fila de espera deste título."
+                                : "Este livro está em circulação. Quando este exemplar voltar ao acervo, você pode continuar pela fila de espera."}
                             </span>
                             <div className="modal-action-stack">
                               <button
@@ -1031,15 +1100,29 @@ export function BookCatalog({
                                 className="book-read-button"
                                 onClick=${() => {
                                   if (modalBook.currentReaderWaitlist) {
-                                    const result = loanActions?.removeWaitlistEntry?.(
-                                      modalBook.currentReaderWaitlist.id
-                                    );
-                                    if (result?.message) {
-                                      setFlash({
-                                        type: result.success ? "success" : "error",
-                                        message: result.message
+                                    const resultPromise = loanApi?.removeWaitlistEntry
+                                      ? loanApi.removeWaitlistEntry(modalBook.currentReaderWaitlist.id)
+                                      : Promise.resolve(
+                                          loanActions?.removeWaitlistEntry?.(
+                                            modalBook.currentReaderWaitlist.id
+                                          )
+                                        );
+
+                                    Promise.resolve(resultPromise)
+                                      .then((result) => {
+                                        if (result?.message) {
+                                          setFlash({
+                                            type: result.success ? "success" : "error",
+                                            message: result.message
+                                          });
+                                        }
+                                      })
+                                      .catch((error) => {
+                                        setFlash({
+                                          type: "error",
+                                          message: error instanceof Error ? error.message : String(error)
+                                        });
                                       });
-                                    }
                                   }
                                   setModalBookId("");
                                 }}
@@ -1354,34 +1437,40 @@ function findLoanBorrowerName(loan, users, currentReader) {
 }
 
 function translateLoanStatus(status) {
-  switch (status) {
-    case "PENDING_APPROVAL":
+  switch (normalizeLoanStatus(status)) {
+    case "PENDENTE_APROVACAO":
       return "Aguardando aprovação";
-    case "READY_FOR_PICKUP":
+    case "AGUARDANDO_RETIRADA":
+    case "AGUARDANDO_CONFIRMACAO":
       return "Pronto para retirada";
-    case "BORROWED":
+    case "EMPRESTADO":
       return "Emprestado";
-    case "RETURNED":
+    case "DEVOLVIDO":
       return "Devolvido";
-    case "REJECTED":
+    case "RECUSADO":
       return "Solicitação negada";
+    case "CANCELADO":
+      return "Solicitação cancelada";
     default:
       return "Em processamento";
   }
 }
 
 function buildLoanStatusMessage(loan, book) {
-  switch (loan.status) {
-    case "PENDING_APPROVAL":
+  switch (normalizeLoanStatus(loan.status)) {
+    case "PENDENTE_APROVACAO":
       return "Solicitação enviada ao admin.";
-    case "READY_FOR_PICKUP":
+    case "AGUARDANDO_RETIRADA":
+    case "AGUARDANDO_CONFIRMACAO":
       return `Reserve até ${formatLoanDate(loan.readyUntil || loan.dueAt)} e retire em ${loan.location || "local a definir"} com ${loan.responsible || "responsável a definir"}.`;
-    case "BORROWED":
+    case "EMPRESTADO":
       return book.type === "digital"
         ? `Acesso liberado até ${formatLoanDate(loan.dueAt)}.`
         : `Com você até ${formatLoanDate(loan.dueAt)}.`;
-    case "REJECTED":
+    case "RECUSADO":
       return "Solicitação negada. Fale com o responsável pelas liberações.";
+    case "CANCELADO":
+      return "Solicitação cancelada.";
     default:
       return "Status atualizado.";
   }

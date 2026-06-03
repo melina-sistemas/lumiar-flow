@@ -14,7 +14,7 @@ export async function returnLoan(input, dependencies) {
     return createError("loan_not_found", "Emprestimo nao encontrado.");
   }
 
-  if (loan.returnedAt || loan.status === "returned") {
+  if (loan.returnedAt || String(loan.status ?? "").trim().toUpperCase() === "DEVOLVIDO") {
     return createError(
       "loan_already_returned",
       "Este emprestimo ja foi finalizado."
@@ -79,7 +79,7 @@ export async function returnLoan(input, dependencies) {
   );
   const updatedLoan = {
     ...loan,
-    status: "returned",
+    status: "DEVOLVIDO",
     returnedAt,
     returnRecordId: returnRecord.id
   };

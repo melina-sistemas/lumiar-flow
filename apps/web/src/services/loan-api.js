@@ -15,10 +15,29 @@ export function createLoanApiClient(baseUrl) {
       });
     },
 
+    async joinWaitlist(input) {
+      return request(`${baseUrl}/waitlists`, {
+        method: "POST",
+        body: JSON.stringify(input)
+      });
+    },
+
+    async removeWaitlistEntry(waitlistId) {
+      return request(`${baseUrl}/waitlists/${encodeURIComponent(waitlistId)}`, {
+        method: "DELETE"
+      });
+    },
+
     async returnLoan(input) {
       return request(`${baseUrl}/loans/${input.loanId}/return`, {
         method: "POST",
         body: JSON.stringify(input)
+      });
+    },
+
+    async confirmPickup(loanId) {
+      return request(`${baseUrl}/loans/${encodeURIComponent(loanId)}/confirm-pickup`, {
+        method: "POST"
       });
     },
 

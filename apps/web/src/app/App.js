@@ -122,6 +122,7 @@ function isRejectedOrBlockedAuthUser(user) {
 export function App() {
   const apiBaseUrl = getApiBaseUrl();
   const authApi = useMemo(() => createAuthApiClient(apiBaseUrl), [apiBaseUrl]);
+  const loanApi = useMemo(() => (apiBaseUrl ? createLoanApiClient(apiBaseUrl) : null), [apiBaseUrl]);
   const location = useLocation();
   const navigate = useNavigate();
   const [authUser, setAuthUser] = useState(null);
@@ -636,6 +637,20 @@ export function App() {
     }
   }
 
+  useEffect(() => {
+    if (!apiBaseUrl) {
+      return undefined;
+    }
+
+    const timer = globalThis.setInterval(() => {
+      refreshCatalog().catch(() => {});
+    }, 30 * 1000);
+
+    return () => {
+      globalThis.clearInterval(timer);
+    };
+  }, [apiBaseUrl]);
+
   const commonBookPageProps = {
     activeLoans,
     borrowerId,
@@ -646,6 +661,7 @@ export function App() {
     selectedBookId,
     onSelectBook: setSelectedBookId,
     loanActions: adminPanel.actions,
+    loanApi,
     currentReader,
     currentReaderLoans,
     hasApprovedAccess,

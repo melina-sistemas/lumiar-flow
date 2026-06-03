@@ -1,6 +1,10 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
 import htm from "htm";
 import { AdminPageLayout } from "../../components/AdminPageLayout.js";
+import {
+  isLoanBorrowed,
+  isLoanPendingApproval
+} from "../../features/books/loan-status.js";
 
 const html = htm.bind(React.createElement);
 
@@ -15,12 +19,12 @@ export function AdminRequestsPage({ loans, books, users, actions }) {
   }, []);
 
   const pendingRequests = useMemo(
-    () => loans.filter((loan) => loan.status === "PENDING_APPROVAL"),
+    () => loans.filter((loan) => isLoanPendingApproval(loan.status)),
     [loans]
   );
 
   const activeLoans = useMemo(
-    () => loans.filter((loan) => loan.status === "BORROWED"),
+    () => loans.filter((loan) => isLoanBorrowed(loan.status)),
     [loans]
   );
 

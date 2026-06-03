@@ -52,9 +52,11 @@ export function LoanForm({
 
     try {
       const client = createLoanApiClient(apiBaseUrl);
+      const selectedBook = books.find((book) => book.id === selectedBookId);
       const response = await client.createLoan({
         userId: selectedUserId,
-        bookId: selectedBookId
+        bookId: selectedBookId,
+        type: selectedBook?.type
       });
 
       if (!response.success) {

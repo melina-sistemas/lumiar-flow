@@ -1,10 +1,13 @@
 const OFFICIAL_LOAN_STATUS_LABELS = {
   DISPONIVEL: "Disponível",
   PENDENTE_APROVACAO: "Pendente de aprovação",
+  AGUARDANDO_RETIRADA: "Aguardando retirada",
+  AGUARDANDO_CONFIRMACAO: "Aguardando confirmação",
   EMPRESTADO: "Emprestado",
   AGUARDANDO_FILA: "Aguardando fila",
   DEVOLVIDO: "Devolvido",
-  REJEITADO: "Rejeitado"
+  RECUSADO: "Recusado",
+  CANCELADO: "Cancelado"
 };
 
 const OFFICIAL_WAITLIST_STATUS_LABELS = {
@@ -22,11 +25,15 @@ export function normalizeLoanStatus(status) {
     case "EXPIRED":
       return "DISPONIVEL";
     case "READY_FOR_PICKUP":
-      return "AGUARDANDO_FILA";
+      return "AGUARDANDO_CONFIRMACAO";
     case "PENDING_APPROVAL":
     case "PENDENTE_APROVACAO":
     case "PENDENTE DE APROVACAO":
       return "PENDENTE_APROVACAO";
+    case "AGUARDANDO_RETIRADA":
+      return "AGUARDANDO_RETIRADA";
+    case "AGUARDANDO_CONFIRMACAO":
+      return "AGUARDANDO_CONFIRMACAO";
     case "BORROWED":
     case "ACTIVE":
     case "OVERDUE":
@@ -42,8 +49,10 @@ export function normalizeLoanStatus(status) {
       return "DEVOLVIDO";
     case "REJECTED":
     case "REJEITADO":
+      return "RECUSADO";
     case "CANCELLED":
-      return "REJEITADO";
+    case "CANCELADO":
+      return "CANCELADO";
     default:
       return "DISPONIVEL";
   }
@@ -57,9 +66,12 @@ export function normalizeWaitlistStatus(status) {
     case "AGUARDANDO_FILA":
     case "READY":
       return "AGUARDANDO_FILA";
+    case "AGUARDANDO_CONFIRMACAO":
+      return "AGUARDANDO_CONFIRMACAO";
     case "CANCELLED":
+    case "CANCELADO":
     case "EXPIRED":
-      return "REJEITADO";
+      return "CANCELADO";
     default:
       return "AGUARDANDO_FILA";
   }
@@ -89,6 +101,8 @@ export function isLoanActive(status) {
   const normalized = normalizeLoanStatus(status);
   return (
     normalized === "PENDENTE_APROVACAO" ||
+    normalized === "AGUARDANDO_RETIRADA" ||
+    normalized === "AGUARDANDO_CONFIRMACAO" ||
     normalized === "EMPRESTADO" ||
     normalized === "AGUARDANDO_FILA"
   );

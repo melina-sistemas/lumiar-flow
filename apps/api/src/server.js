@@ -162,7 +162,89 @@ export function createApiServer(repository, adminStateStore) {
           }
         );
 
+        if (result.success) {
+          try {
+            await mirrorLoanRequestIntoAdminState(adminStateStore, body, result.data.loan);
+          } catch (error) {
+            sentry.captureException(error);
+          }
+        }
+
         return sendUseCaseResult(response, result, 201);
+      }
+
+      const confirmPickupMatch = pathname.match(/^\/loans\/([^/]+)\/confirm-pickup$/);
+
+      if (request.method === "POST" && confirmPickupMatch) {
+        const body = await readJsonBody(request);
+        const currentUser = await requireAuthenticatedUser(request, adminStateStore, repository, {
+          allowPending: false
+        });
+
+        if (!currentUser.ok) {
+          return sendJson(response, currentUser.statusCode, currentUser.payload);
+        }
+
+        const currentState = await adminStateStore.read();
+        const normalizedState = normalizeAdminState(currentState.state);
+        const targetLoan = (Array.isArray(normalizedState.loans) ? normalizedState.loans : []).find(
+          (loan) => String(loan.id) === String(confirmPickupMatch[1])
+        );
+
+        if (!targetLoan) {
+          return sendJson(response, 404, {
+            success: false,
+            error: {
+              code: "loan_not_found",
+              message: "Empréstimo não encontrado."
+            }
+          });
+        }
+
+        if (
+          currentUser.user.role !== "admin" &&
+          String(currentUser.user.id) !== String(targetLoan.userId)
+        ) {
+          return sendJson(response, 403, {
+            success: false,
+            error: {
+              code: "forbidden",
+              message: "Você só pode confirmar a retirada do seu próprio livro."
+            }
+          });
+        }
+
+        const normalizedLoan = normalizeAdminLoan(targetLoan);
+        if (
+          !["AGUARDANDO_RETIRADA", "AGUARDANDO_CONFIRMACAO"].includes(
+            normalizeLoanStatus(normalizedLoan.status)
+          )
+        ) {
+          return sendJson(response, 400, {
+            success: false,
+            error: {
+              code: "invalid_loan_status",
+              message: "Este empréstimo ainda não está liberado para confirmação."
+            }
+          });
+        }
+
+        const confirmedAt = String(body.confirmedAt ?? new Date().toISOString()).trim();
+        const updatedLoan = normalizeAdminLoan({
+          ...normalizedLoan,
+          status: "EMPRESTADO",
+          borrowedAt: confirmedAt,
+          returnedAt: ""
+        });
+
+        await repository.saveLoan(updatedLoan);
+        await mirrorLoanPickupIntoAdminState(adminStateStore, updatedLoan, currentUser.user);
+
+        return sendJson(response, 200, {
+          success: true,
+          loan: updatedLoan,
+          message: "Retirada confirmada com sucesso."
+        });
       }
 
       const returnMatch = pathname.match(/^\/loans\/([^/]+)\/return$/);
@@ -190,6 +272,17 @@ export function createApiServer(repository, adminStateStore) {
         );
 
         return sendUseCaseResult(response, result, 200);
+      }
+
+      if (request.method === "POST" && pathname === "/waitlists") {
+        const body = await readJsonBody(request);
+        return handleJoinWaitlist(response, body, adminStateStore, repository, request);
+      }
+
+      const waitlistMatch = pathname.match(/^\/waitlists\/([^/]+)$/);
+
+      if (request.method === "DELETE" && waitlistMatch) {
+        return handleRemoveWaitlistEntry(response, waitlistMatch[1], adminStateStore, repository, request);
       }
 
       if (request.method === "POST" && pathname === "/admin/books/import-pdf") {
@@ -249,6 +342,20 @@ export function createApiServer(repository, adminStateStore) {
 
         const body = await readJsonBody(request);
         const nextState = normalizeAdminState(body.state ?? body);
+        const baseUpdatedAt = String(body.baseUpdatedAt ?? body.adminStateUpdatedAt ?? "").trim();
+        const currentState = await adminStateStore.read();
+
+        if (currentState.updatedAt && baseUpdatedAt !== currentState.updatedAt) {
+          return sendJson(response, 409, {
+            success: false,
+            error: {
+              code: "stale_admin_state",
+              message:
+                "O painel administrativo foi atualizado em outro navegador. Recarregue a página para sincronizar as alterações."
+            }
+          });
+        }
+
         const savedState = await adminStateStore.write(nextState);
 
         return sendJson(response, 200, {
@@ -1064,6 +1171,481 @@ function sendUseCaseResult(response, result, successStatus) {
   return sendJson(response, mapErrorToStatus(result.error.code), result);
 }
 
+async function handleJoinWaitlist(response, body, adminStateStore, repository, request) {
+  const currentUser = await requireAuthenticatedUser(request, adminStateStore, repository, {
+    allowPending: false
+  });
+
+  if (!currentUser.ok) {
+    return sendJson(response, currentUser.statusCode, currentUser.payload);
+  }
+
+  const userId = String(body.userId ?? "").trim();
+  const bookId = String(body.bookId ?? "").trim();
+
+  if (!userId || !bookId) {
+    return sendJson(response, 400, {
+      success: false,
+      error: {
+        code: "invalid_request",
+        message: "Informe userId e bookId."
+      }
+    });
+  }
+
+  if (currentUser.user.role !== "admin" && String(currentUser.user.id) !== userId) {
+    return sendJson(response, 403, {
+      success: false,
+      error: {
+        code: "forbidden",
+        message: "Voce so pode entrar na fila do seu proprio usuario."
+      }
+    });
+  }
+
+  const lookupRepository = createAuthenticatedRepository(repository, adminStateStore);
+  const [book, user] = await Promise.all([
+    lookupRepository.findBookById(bookId),
+    lookupRepository.findUserById(userId)
+  ]);
+
+  if (!book || !user) {
+    return sendJson(response, 404, {
+      success: false,
+      error: {
+        code: "book_not_found",
+        message: "Livro ou usuario nao encontrado."
+      }
+    });
+  }
+
+  const currentState = await adminStateStore.read();
+  const normalizedWaitlists = normalizeAdminWaitlists(currentState.state.waitlists);
+  const existing = normalizedWaitlists.find(
+    (entry) =>
+      String(entry.bookId) === bookId &&
+      String(entry.userId) === userId &&
+      entry.status === "AGUARDANDO_FILA"
+  );
+
+  if (existing) {
+    return sendJson(response, 200, {
+      success: true,
+      waitlist: existing,
+      waitlistPosition: getWaitlistPosition(normalizedWaitlists, bookId, userId),
+      message: `Você já está na fila deste livro na posição ${getWaitlistPosition(
+        normalizedWaitlists,
+        bookId,
+        userId
+      )}.`
+    });
+  }
+
+  const userWaitlistCount = countUserWaitlistEntries(normalizedWaitlists, userId);
+  if (userWaitlistCount >= 5) {
+    return sendJson(response, 409, {
+      success: false,
+      error: {
+        code: "waitlist_limit_reached",
+        message: "Você já possui 5 livros na fila de espera. Remova algum antes de adicionar outro."
+      }
+    });
+  }
+
+  const waitlist = normalizeAdminWaitlistEntry({
+    id: `waitlist-${randomUUID()}`,
+    bookId,
+    userId,
+    requestedAt: new Date().toISOString(),
+    status: "AGUARDANDO_FILA"
+  });
+  const waitlistPosition = getWaitlistPosition([...normalizedWaitlists, waitlist], bookId, userId);
+  const notifications = pushWaitlistNotification(
+    currentState.state.notifications,
+    book,
+    user,
+    waitlist,
+    waitlistPosition
+  );
+  const nextState = {
+    ...currentState.state,
+    waitlists: [waitlist, ...normalizedWaitlists],
+    notifications
+  };
+  const savedState = await adminStateStore.write(nextState);
+
+  return sendJson(response, 201, {
+    success: true,
+    waitlist,
+    waitlistPosition,
+    message: `Você entrou na fila de espera na posição ${getWaitlistPosition(
+      nextState.waitlists,
+      bookId,
+      userId
+    )}.`,
+    adminStateUpdatedAt: savedState.updatedAt
+  });
+}
+
+async function handleRemoveWaitlistEntry(response, waitlistId, adminStateStore, repository, request) {
+  const currentUser = await requireAuthenticatedUser(request, adminStateStore, repository, {
+    allowPending: false
+  });
+
+  if (!currentUser.ok) {
+    return sendJson(response, currentUser.statusCode, currentUser.payload);
+  }
+
+  const currentState = await adminStateStore.read();
+  const normalizedWaitlists = normalizeAdminWaitlists(currentState.state.waitlists);
+  const target = normalizedWaitlists.find((entry) => String(entry.id) === String(waitlistId));
+
+  if (!target) {
+    return sendJson(response, 404, {
+      success: false,
+      error: {
+        code: "waitlist_not_found",
+        message: "Fila nao encontrada."
+      }
+    });
+  }
+
+  if (currentUser.user.role !== "admin" && String(target.userId) !== String(currentUser.user.id)) {
+    return sendJson(response, 403, {
+      success: false,
+      error: {
+        code: "forbidden",
+        message: "Voce so pode remover sua propria inscricao na fila."
+      }
+    });
+  }
+
+  const nextWaitlists = normalizedWaitlists.filter((entry) => String(entry.id) !== String(waitlistId));
+  const nextNotifications = Array.isArray(currentState.state.notifications)
+    ? currentState.state.notifications.filter(
+        (notification) => notification.metadata?.waitlistId !== waitlistId
+      )
+    : [];
+  const savedState = await adminStateStore.write({
+    ...currentState.state,
+    waitlists: nextWaitlists,
+    notifications: nextNotifications
+  });
+
+  return sendJson(response, 200, {
+    success: true,
+    message: "Você saiu da fila de espera.",
+    adminStateUpdatedAt: savedState.updatedAt
+  });
+}
+
+async function mirrorLoanRequestIntoAdminState(adminStateStore, body, loan) {
+  const currentState = await adminStateStore.read();
+  const normalizedState = normalizeAdminState(currentState.state);
+  const currentUsers = Array.isArray(normalizedState.users) ? normalizedState.users : [];
+  const currentLoans = Array.isArray(normalizedState.loans) ? normalizedState.loans : [];
+  const currentBooks = Array.isArray(normalizedState.books) ? normalizedState.books : [];
+  const currentNotifications = Array.isArray(normalizedState.notifications)
+    ? normalizedState.notifications
+    : [];
+
+  const book = currentBooks.find((item) => String(item.id) === String(loan.bookId));
+  const user = currentUsers.find((item) => String(item.id) === String(loan.userId));
+
+  if (!book || !user) {
+    return;
+  }
+
+  const normalizedLoan = normalizeAdminLoan({
+    ...loan,
+    requesterId: loan.requesterId ?? loan.userId,
+    requestedAt: loan.requestedAt ?? loan.borrowedAt ?? new Date().toISOString(),
+    type: String(body?.type ?? loan.type ?? book.type ?? "").trim().toLowerCase() === "digital"
+      ? "digital"
+      : "physical",
+    notes: body?.notes ?? loan.notes ?? ""
+  });
+
+  const nextLoans = upsertLoanRecord(currentLoans, normalizedLoan);
+  const nextUsers = syncUsersWithLoans(
+    upsertReadingListForUser(currentUsers, normalizedLoan.userId, normalizedLoan.bookId),
+    nextLoans
+  );
+  const nextNotifications = pushLoanCreationNotifications(
+    currentNotifications,
+    nextUsers,
+    book,
+    user,
+    normalizedLoan
+  );
+
+  await adminStateStore.write({
+    ...normalizedState,
+    users: nextUsers,
+    loans: nextLoans,
+    notifications: nextNotifications
+  });
+}
+
+async function mirrorLoanPickupIntoAdminState(adminStateStore, loan) {
+  const currentState = await adminStateStore.read();
+  const normalizedState = normalizeAdminState(currentState.state);
+  const currentUsers = Array.isArray(normalizedState.users) ? normalizedState.users : [];
+  const currentLoans = Array.isArray(normalizedState.loans) ? normalizedState.loans : [];
+  const currentBooks = Array.isArray(normalizedState.books) ? normalizedState.books : [];
+  const currentNotifications = Array.isArray(normalizedState.notifications)
+    ? normalizedState.notifications
+    : [];
+
+  const book = currentBooks.find((item) => String(item.id) === String(loan.bookId));
+  const user = currentUsers.find((item) => String(item.id) === String(loan.userId));
+
+  if (!book || !user) {
+    return;
+  }
+
+  const nextLoan = normalizeAdminLoan({
+    ...loan,
+    status: "EMPRESTADO",
+    borrowedAt: loan.borrowedAt ?? new Date().toISOString(),
+    returnedAt: ""
+  });
+
+  const nextLoans = upsertLoanRecord(currentLoans, nextLoan);
+  const nextUsers = syncUsersWithLoans(currentUsers, nextLoans);
+  const notificationId = `notification-${nextLoan.id}-pickup`;
+  const filteredNotifications = currentNotifications.filter(
+    (notification) => notification.id !== notificationId
+  );
+
+  filteredNotifications.unshift(
+    normalizeNotification({
+      id: notificationId,
+      userId: user.id,
+      bookId: book.id,
+      type: "loan",
+      title: "Retirada confirmada",
+      message: `Seu livro "${book.title}" já está liberado para leitura.`,
+      actionLabel: "Abrir livro",
+      actionTarget: "/livros",
+      createdAt: new Date().toISOString(),
+      metadata: {
+        loanId: nextLoan.id,
+        requesterId: user.id
+      }
+    })
+  );
+
+  await adminStateStore.write({
+    ...normalizedState,
+    users: nextUsers,
+    loans: nextLoans,
+    notifications: filteredNotifications
+  });
+}
+
+function normalizeAdminLoan(loan) {
+  return {
+    id: loan?.id ?? `loan-${randomUUID()}`,
+    userId: String(loan?.userId ?? ""),
+    bookId: String(loan?.bookId ?? ""),
+    requesterId: String(loan?.requesterId ?? loan?.userId ?? ""),
+    requestedAt: loan?.requestedAt ?? loan?.borrowedAt ?? new Date().toISOString(),
+    type: String(loan?.type ?? "").trim().toLowerCase() === "digital" ? "digital" : "physical",
+    status: normalizeLoanStatus(loan?.status),
+    responsible: loan?.responsible ?? "",
+    location: loan?.location ?? "",
+    dueAt: loan?.dueAt ?? "",
+    readyUntil: loan?.readyUntil ?? "",
+    approvedAt: loan?.approvedAt ?? "",
+    rejectedAt: loan?.rejectedAt ?? "",
+    borrowedAt: loan?.borrowedAt ?? "",
+    returnedAt: loan?.returnedAt ?? "",
+    notes: loan?.notes ?? ""
+  };
+}
+
+function normalizeLoanStatus(status) {
+  const normalized = String(status ?? "").trim().toUpperCase();
+
+  switch (normalized) {
+    case "DISPONIVEL":
+    case "AVAILABLE":
+    case "EXPIRED":
+      return "DISPONIVEL";
+    case "READY_FOR_PICKUP":
+      return "AGUARDANDO_CONFIRMACAO";
+    case "PENDING_APPROVAL":
+    case "PENDENTE_APROVACAO":
+    case "PENDENTE DE APROVACAO":
+      return "PENDENTE_APROVACAO";
+    case "AGUARDANDO_RETIRADA":
+      return "AGUARDANDO_RETIRADA";
+    case "AGUARDANDO_CONFIRMACAO":
+      return "AGUARDANDO_CONFIRMACAO";
+    case "BORROWED":
+    case "ACTIVE":
+    case "OVERDUE":
+    case "EMPRESTADO":
+    case "RETURN_REQUESTED":
+      return "EMPRESTADO";
+    case "WAITING":
+    case "AGUARDANDO_FILA":
+    case "READY":
+      return "AGUARDANDO_FILA";
+    case "RETURNED":
+    case "DEVOLVIDO":
+      return "DEVOLVIDO";
+    case "REJECTED":
+    case "REJEITADO":
+      return "RECUSADO";
+    case "CANCELLED":
+    case "CANCELADO":
+      return "CANCELADO";
+    default:
+      return "DISPONIVEL";
+  }
+}
+
+function isActiveLoanStatus(status) {
+  const normalized = normalizeLoanStatus(status);
+
+  return (
+    normalized === "PENDENTE_APROVACAO" ||
+    normalized === "AGUARDANDO_RETIRADA" ||
+    normalized === "AGUARDANDO_CONFIRMACAO" ||
+    normalized === "EMPRESTADO" ||
+    normalized === "AGUARDANDO_FILA"
+  );
+}
+
+function syncUsersWithLoans(users, loans) {
+  return (Array.isArray(users) ? users : []).map((user) => {
+    const activeLoan = (Array.isArray(loans) ? loans : []).find(
+      (loan) =>
+        String(loan.userId) === String(user.id) &&
+        loan.type !== "digital" &&
+        isActiveLoanStatus(loan.status)
+    );
+
+    return {
+      ...user,
+      activeLoanId: activeLoan?.id ?? null
+    };
+  });
+}
+
+function upsertReadingListForUser(users, userId, bookId) {
+  return (Array.isArray(users) ? users : []).map((user) => {
+    if (String(user.id) !== String(userId)) {
+      return user;
+    }
+
+    const readingList = Array.isArray(user.readingList) ? user.readingList : [];
+    const nextReadingList = readingList.includes(bookId) ? readingList : [...readingList, bookId];
+
+    return {
+      ...user,
+      readingList: nextReadingList
+    };
+  });
+}
+
+function upsertLoanRecord(loans, loan) {
+  const next = Array.isArray(loans) ? loans.slice() : [];
+  const index = next.findIndex((item) => String(item.id) === String(loan.id));
+  if (index >= 0) {
+    next[index] = loan;
+  } else {
+    next.unshift(loan);
+  }
+  return next;
+}
+
+function pushLoanCreationNotifications(notifications, users, book, user, loan) {
+  const next = Array.isArray(notifications) ? notifications.slice() : [];
+  const normalizedLoan = normalizeAdminLoan(loan);
+
+  const filtered = next.filter((entry) => {
+    if (entry.id === `notification-${normalizedLoan.id}`) {
+      return false;
+    }
+
+    if (String(normalizedLoan.type) !== "digital") {
+      return !users.some(
+        (admin) =>
+          admin.role === "admin" &&
+          admin.accessStatus !== "blocked" &&
+          entry.id === `notification-${normalizedLoan.id}-${admin.id}`
+      );
+    }
+
+    return true;
+  });
+
+  if (normalizedLoan.type === "digital") {
+    filtered.unshift(
+      normalizeNotification({
+        id: `notification-${normalizedLoan.id}`,
+        userId: user.id,
+        bookId: book.id,
+        type: "loan",
+        title: "Acesso liberado",
+        message: `O livro "${book.title}" foi liberado para leitura.`,
+        actionLabel: "Abrir livro",
+        actionTarget: "/livros",
+        createdAt: new Date().toISOString(),
+        metadata: {
+          loanId: normalizedLoan.id,
+          requesterId: user.id
+        }
+      })
+    );
+
+    return filtered;
+  }
+
+  filtered.unshift(
+    normalizeNotification({
+      id: `notification-${normalizedLoan.id}`,
+      userId: user.id,
+      bookId: book.id,
+      type: "loan",
+      title: "Solicitação enviada",
+      message: `Sua solicitação para "${book.title}" foi enviada para aprovação.`,
+      actionLabel: "Ver livro",
+      actionTarget: "/livros",
+      createdAt: new Date().toISOString(),
+      metadata: {
+        loanId: normalizedLoan.id,
+        requesterId: user.id
+      }
+    })
+  );
+
+  for (const admin of users.filter((item) => item.role === "admin" && item.accessStatus !== "blocked")) {
+    filtered.unshift(
+      normalizeNotification({
+        id: `notification-${normalizedLoan.id}-${admin.id}`,
+        userId: admin.id,
+        bookId: book.id,
+        type: "loan-approval",
+        title: "Nova solicitação de empréstimo",
+        message: `${user.name} solicitou "${book.title}".`,
+        actionLabel: "Abrir solicitações",
+        actionTarget: "/admin/requests",
+        createdAt: new Date().toISOString(),
+        metadata: {
+          loanId: normalizedLoan.id,
+          requesterId: user.id
+        }
+      })
+    );
+  }
+
+  return filtered;
+}
+
 function areUsersEquivalent(left, right) {
   if (!left || !right) {
     return false;
@@ -1120,7 +1702,7 @@ function sendJson(response, statusCode, payload) {
     "Content-Type": "application/json; charset=utf-8",
     "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
     Vary: "Origin"
   });
@@ -1191,6 +1773,103 @@ function normalizeAdminState(state) {
     loans: Array.isArray(state.loans) ? state.loans : [],
     waitlists: Array.isArray(state.waitlists) ? state.waitlists : [],
     notifications: Array.isArray(state.notifications) ? state.notifications : []
+  };
+}
+
+function normalizeAdminWaitlists(waitlists = []) {
+  return (Array.isArray(waitlists) ? waitlists : []).map((entry) => normalizeAdminWaitlistEntry(entry));
+}
+
+function normalizeAdminWaitlistEntry(entry) {
+  return {
+    id: entry?.id ?? `waitlist-${randomUUID()}`,
+    bookId: String(entry?.bookId ?? ""),
+    userId: String(entry?.userId ?? ""),
+    requestedAt: entry?.requestedAt ?? new Date().toISOString(),
+    status: normalizeWaitlistStatus(entry?.status),
+    readyAt: entry?.readyAt ?? "",
+    readyUntil: entry?.readyUntil ?? "",
+    notificationId: entry?.notificationId ?? "",
+    loanId: entry?.loanId ?? ""
+  };
+}
+
+function normalizeWaitlistStatus(status) {
+  const normalized = String(status ?? "").trim().toUpperCase();
+
+  if (normalized === "AGUARDANDO_CONFIRMACAO") {
+    return "AGUARDANDO_CONFIRMACAO";
+  }
+
+  if (normalized === "CANCELADO" || normalized === "CANCELLED" || normalized === "EXPIRED") {
+    return "CANCELADO";
+  }
+
+  return "AGUARDANDO_FILA";
+}
+
+function countUserWaitlistEntries(waitlists, userId) {
+  const seen = new Set();
+
+  for (const entry of Array.isArray(waitlists) ? waitlists : []) {
+    if (String(entry.userId) !== String(userId) || entry.status !== "AGUARDANDO_FILA") {
+      continue;
+    }
+
+    seen.add(String(entry.bookId));
+  }
+
+  return seen.size;
+}
+
+function getWaitlistPosition(waitlists, bookId, userId) {
+  const queue = (Array.isArray(waitlists) ? waitlists : [])
+    .filter((entry) => String(entry.bookId) === String(bookId) && entry.status !== "CANCELADO")
+    .sort((left, right) => new Date(left.requestedAt || 0).getTime() - new Date(right.requestedAt || 0).getTime());
+  const index = queue.findIndex((entry) => String(entry.userId) === String(userId));
+
+  return index >= 0 ? index + 1 : queue.length + 1;
+}
+
+function pushWaitlistNotification(notifications, book, user, waitlist) {
+  const next = Array.isArray(notifications) ? notifications.filter((entry) => entry.id !== `notification-${waitlist.id}`) : [];
+  next.unshift(
+    normalizeNotification({
+      id: `notification-${waitlist.id}`,
+      userId: user.id,
+      bookId: book.id,
+      type: "waitlist",
+      title: "Você entrou na fila",
+      message: `O livro "${book.title}" foi adicionado à fila de espera. Você está na posição ${getWaitlistPosition(
+        [waitlist, ...(Array.isArray(notifications) ? [] : [])],
+        book.id,
+        user.id
+      )}.`,
+      actionLabel: "Ver livro",
+      actionTarget: "/livros",
+      createdAt: new Date().toISOString(),
+      metadata: {
+        waitlistId: waitlist.id
+      }
+    })
+  );
+  return next;
+}
+
+function normalizeNotification(notification) {
+  return {
+    id: notification?.id ?? `notification-${randomUUID()}`,
+    userId: String(notification?.userId ?? ""),
+    bookId: String(notification?.bookId ?? ""),
+    type: notification?.type ?? "info",
+    title: notification?.title ?? "",
+    message: notification?.message ?? "",
+    actionLabel: notification?.actionLabel ?? "",
+    actionTarget: notification?.actionTarget ?? "",
+    createdAt: notification?.createdAt ?? new Date().toISOString(),
+    readAt: notification?.readAt ?? "",
+    dismissedAt: notification?.dismissedAt ?? "",
+    metadata: notification?.metadata ?? {}
   };
 }
 

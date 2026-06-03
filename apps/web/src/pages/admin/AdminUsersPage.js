@@ -1,6 +1,7 @@
 ﻿import React, { useMemo, useState } from "react";
 import htm from "htm";
 import { AdminPageLayout } from "../../components/AdminPageLayout.js";
+import { normalizeLoanStatus } from "../../features/books/loan-status.js";
 
 const html = htm.bind(React.createElement);
 
@@ -928,12 +929,12 @@ function translateLevel(level) {
 }
 
 function translateStatus(status) {
-    switch (status) {
-      case "pending":
-        return "Pendente";
-      case "approved":
-      case "active":
-        return "Ativo";
+  switch (status) {
+    case "pending":
+      return "Pendente";
+    case "approved":
+    case "active":
+      return "Ativo";
       case "blocked":
         return "Bloqueado";
       case "rejected":
@@ -944,15 +945,20 @@ function translateStatus(status) {
 }
 
 function translateLoanStatus(status) {
-  switch (status) {
-    case "PENDING_APPROVAL":
+  switch (normalizeLoanStatus(status)) {
+    case "PENDENTE_APROVACAO":
       return "Em análise";
-    case "READY_FOR_PICKUP":
+    case "AGUARDANDO_RETIRADA":
+    case "AGUARDANDO_CONFIRMACAO":
       return "Pronto para retirada";
-    case "BORROWED":
+    case "EMPRESTADO":
       return "Emprestado";
-    case "RETURNED":
+    case "DEVOLVIDO":
       return "Devolvido";
+    case "RECUSADO":
+      return "Recusado";
+    case "CANCELADO":
+      return "Cancelado";
     default:
       return status || "-";
   }
@@ -965,19 +971,23 @@ function formatDate(value) {
 function getRecommendedBookStatus({ book, history }) {
   const matchingHistory = history.find((item) => item.bookId === book.id) || null;
 
-  if (matchingHistory?.status === "RETURNED") {
+  if (normalizeLoanStatus(matchingHistory?.status) === "DEVOLVIDO") {
     return { label: "Lido", className: "active" };
   }
 
-  if (matchingHistory?.status === "BORROWED") {
+  if (normalizeLoanStatus(matchingHistory?.status) === "EMPRESTADO") {
     return { label: "Emprestado", className: "pending" };
   }
 
-  if (matchingHistory?.status === "READY_FOR_PICKUP") {
+  if (
+    ["AGUARDANDO_RETIRADA", "AGUARDANDO_CONFIRMACAO"].includes(
+      normalizeLoanStatus(matchingHistory?.status)
+    )
+  ) {
     return { label: "Pronto para retirada", className: "pending" };
   }
 
-  if (matchingHistory?.status === "PENDING_APPROVAL") {
+  if (normalizeLoanStatus(matchingHistory?.status) === "PENDENTE_APROVACAO") {
     return { label: "Aguardando aprovação", className: "pending" };
   }
 

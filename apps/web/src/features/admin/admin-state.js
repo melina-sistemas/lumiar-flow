@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createAdminApiClient } from "../../services/admin-api.js";
+import { createLoanApiClient } from "../../services/loan-api.js";
 import { DEFAULT_BRAND_SETTINGS } from "../branding/brand-theme.js";
 import {
   MAX_WAITLIST_BOOKS_PER_USER,
@@ -8,7 +9,9 @@ import {
   isLoanBorrowed,
   isLoanPendingApproval,
   isLoanReturned,
-  isWaitlistEntryActive
+  isWaitlistEntryActive,
+  normalizeLoanStatus,
+  normalizeWaitlistStatus
 } from "../books/loan-status.js";
 
 const STORAGE_KEY = "lumiar-flow-admin-panel-v1";
@@ -275,14 +278,43 @@ const stabilizeAdminState = (rawState = {}) => {
 };
 
 export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", catalogReady = false) {
-  const [state, setState] = useState(() =>
+  const [state, setStateBase] = useState(() =>
     stabilizeAdminState(createAdminState(readAdminState()))
   );
+  const currentUserId = currentUser?.id ?? "";
+  const currentUserRole = currentUser?.role ?? "";
+  const currentUserAccessStatus = normalizeUserAccessStatus(
+    currentUser?.status ?? currentUser?.accessStatus
+  );
   const syncReadyRef = useRef(false);
+  const remoteStateLoadedRef = useRef(false);
+  const syncAnchorRef = useRef(null);
   const adminApi = useMemo(
     () => (apiBaseUrl ? createAdminApiClient(apiBaseUrl) : null),
     [apiBaseUrl]
   );
+  const loanApi = useMemo(
+    () => (apiBaseUrl ? createLoanApiClient(apiBaseUrl) : null),
+    [apiBaseUrl]
+  );
+
+  const setState = (updater) => {
+    setStateBase((current) => {
+      const next = typeof updater === "function" ? updater(current) : updater;
+
+      if (next && next !== current) {
+        void persistAdminStateSnapshot(next);
+      }
+
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    syncReadyRef.current = false;
+    remoteStateLoadedRef.current = false;
+    syncAnchorRef.current = null;
+  }, [currentUserId, currentUserRole]);
 
   useEffect(() => {
     if (!catalogReady) {
@@ -291,68 +323,110 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
 
     const persistedState = catalog.adminStateUpdatedAt ? catalog.adminState : readAdminState();
 
-    setState((current) =>
+    setStateBase((current) =>
       stabilizeAdminState(
         mergeCatalogIntoState(catalog, persistedState && Object.keys(persistedState).length > 0 ? persistedState : current)
       )
     );
-    syncReadyRef.current = true;
   }, [catalog, catalogReady]);
 
   useEffect(() => {
     writeAdminState(state);
   }, [state]);
 
+  async function refreshStateFromBackend() {
+    const canHydrateCurrentUser = Boolean(currentUserId) && currentUserAccessStatus === "approved";
+
+    if (!canHydrateCurrentUser || !catalogReady) {
+      return null;
+    }
+
+    try {
+      const response =
+        currentUserRole === "admin" && adminApi && typeof adminApi.fetchState === "function"
+          ? await adminApi.fetchState()
+          : loanApi && typeof loanApi.fetchSeed === "function"
+            ? await loanApi.fetchSeed()
+            : null;
+
+      if (!response?.adminState) {
+        return null;
+      }
+
+      const hydratedState = stabilizeAdminState(mergeCatalogIntoState(catalog, response.adminState));
+      syncAnchorRef.current = response.adminStateUpdatedAt ?? syncAnchorRef.current;
+      setStateBase(() => hydratedState);
+      remoteStateLoadedRef.current = true;
+      syncReadyRef.current = true;
+
+      return response;
+    } catch {
+      return null;
+    }
+  }
+
   useEffect(() => {
-    if (!adminApi) {
-      return undefined;
-    }
+    let cancelled = false;
 
-    const canSyncCurrentUser =
-      currentUser?.role === "admin" &&
-      normalizeUserAccessStatus(currentUser?.status ?? currentUser?.accessStatus) === "approved";
+    const hydrate = async () => {
+      const response = await refreshStateFromBackend();
 
-    if (!canSyncCurrentUser) {
-      return undefined;
-    }
-
-    if (!syncReadyRef.current) {
-      return undefined;
-    }
-
-    const timer = globalThis.setTimeout(() => {
-      if (typeof adminApi.syncState !== "function" && typeof adminApi.syncBooks !== "function") {
+      if (cancelled || !response?.adminState) {
         return;
       }
+    };
 
-      const syncState = typeof adminApi.syncState === "function" ? adminApi.syncState.bind(adminApi) : null;
-      const syncBooks = typeof adminApi.syncBooks === "function" ? adminApi.syncBooks.bind(adminApi) : null;
+    void hydrate();
 
-      if (syncState) {
-        syncState(state).catch(() => {
-          if (syncBooks) {
-            syncBooks(state.books).catch(() => {});
-          }
-        });
-      } else if (syncBooks) {
-        syncBooks(state.books).catch(() => {});
-      }
-    }, 150);
+    const timer = globalThis.setInterval(() => {
+      void hydrate();
+    }, 20 * 1000);
 
     return () => {
-      globalThis.clearTimeout(timer);
+      cancelled = true;
+      globalThis.clearInterval(timer);
     };
-  }, [adminApi, currentUser, state]);
+  }, [adminApi, catalog, catalogReady, currentUserAccessStatus, currentUserId, currentUserRole, loanApi]);
 
   useEffect(() => {
     const timer = globalThis.setInterval(() => {
-      setState((current) => stabilizeAdminState(current));
+      setStateBase((current) => stabilizeAdminState(current));
     }, 60 * 1000);
 
     return () => {
       globalThis.clearInterval(timer);
     };
   }, []);
+
+  const persistAdminStateSnapshot = async (snapshot) => {
+    if (!adminApi || typeof adminApi.syncState !== "function") {
+      return;
+    }
+
+    const canPersistCurrentUser =
+      currentUserRole === "admin" && currentUserAccessStatus === "approved";
+
+    if (!canPersistCurrentUser) {
+      return;
+    }
+
+    if (!syncReadyRef.current || !remoteStateLoadedRef.current) {
+      return;
+    }
+
+    try {
+      const result = await adminApi.syncState({
+        state: snapshot,
+        baseUpdatedAt: syncAnchorRef.current
+      });
+
+      if (result?.adminStateUpdatedAt) {
+        syncAnchorRef.current = result.adminStateUpdatedAt;
+      }
+    } catch {
+      // Keep the optimistic local state if the backend is temporarily out of sync.
+    }
+  };
 
   const monitoring = useMemo(
     () => buildMonitoring(state, catalog),
@@ -805,7 +879,9 @@ function assignBookToUser(userId, bookId) {
       }
 
       const existingBorrowed = current.loans.find(
-        (loan) => loan.userId === userId && loan.status === "BORROWED"
+        (loan) =>
+          loan.userId === userId &&
+          normalizeLoanStatus(loan.status) === "EMPRESTADO"
       );
 
       if (existingBorrowed) {
@@ -834,7 +910,7 @@ function assignBookToUser(userId, bookId) {
         requesterId: userId,
         requestedAt: now,
         type: book.type,
-        status: "BORROWED",
+        status: "EMPRESTADO",
         responsible: "Equipe Lumiar Flow",
         location: "Biblioteca Lumiar Flow",
         dueAt: addDays(now, book.type === "digital" ? 180 : current.settings.globalMaxDays),
@@ -969,7 +1045,7 @@ function assignBookToUser(userId, bookId) {
       const hasActiveBorrowedLoan = current.loans.some(
         (loan) =>
           loan.userId === input.userId &&
-          loan.status === "BORROWED" &&
+          normalizeLoanStatus(loan.status) === "EMPRESTADO" &&
           loan.type !== "digital"
       );
 
@@ -999,7 +1075,7 @@ function assignBookToUser(userId, bookId) {
           requesterId: input.userId,
           requestedAt: input.requestedAt ?? now,
           type: "digital",
-          status: "BORROWED",
+          status: "EMPRESTADO",
           responsible: "",
           location: "",
           dueAt: input.dueAt ?? addDays(now, 180),
@@ -1059,7 +1135,7 @@ function assignBookToUser(userId, bookId) {
         requesterId: input.userId,
         requestedAt: input.requestedAt ?? now,
         type: "physical",
-        status: "PENDING_APPROVAL",
+        status: "PENDENTE_APROVACAO",
         responsible: "",
         location: "",
         dueAt: input.dueAt ?? addDays(now, current.settings.globalMaxDays),
@@ -1249,7 +1325,7 @@ function assignBookToUser(userId, bookId) {
         return current;
       }
 
-      if (target.status !== "PENDING_APPROVAL") {
+      if (normalizeLoanStatus(target.status) !== "PENDENTE_APROVACAO") {
         result = {
           success: false,
           message: "Apenas solicitações pendentes podem ser aprovadas."
@@ -1261,7 +1337,7 @@ function assignBookToUser(userId, bookId) {
         (loan) =>
           loan.userId === target.userId &&
           loan.id !== target.id &&
-          loan.status === "BORROWED" &&
+          normalizeLoanStatus(loan.status) === "EMPRESTADO" &&
           loan.type !== "digital"
       );
 
@@ -1288,7 +1364,7 @@ function assignBookToUser(userId, bookId) {
         borrowedAt: new Date().toISOString(),
         dueAt: changes.dueAt ? new Date(changes.dueAt).toISOString() : addDays(new Date().toISOString(), current.settings.globalMaxDays),
         readyUntil: "",
-        status: "BORROWED"
+        status: "AGUARDANDO_RETIRADA"
       });
       const loans = current.loans.map((loan) => (loan.id === loanId ? updatedLoan : loan));
       result = {
@@ -1306,13 +1382,7 @@ function assignBookToUser(userId, bookId) {
           loan: updatedLoan
         }).books,
         users: syncUsersWithLoans(current.users, loans),
-        notifications: pushLoanNotification(
-          current.notifications,
-          book,
-          user,
-          updatedLoan,
-          "Empréstimo liberado"
-        )
+        notifications: pushLoanApprovalNotification(current.notifications, book, user, updatedLoan)
       };
     });
 
@@ -1338,7 +1408,7 @@ function assignBookToUser(userId, bookId) {
         return current;
       }
 
-      if (target.status !== "PENDING_APPROVAL") {
+      if (normalizeLoanStatus(target.status) !== "PENDENTE_APROVACAO") {
         result = {
           success: false,
           message: "Apenas solicitações pendentes podem ser reprovadas."
@@ -1348,7 +1418,7 @@ function assignBookToUser(userId, bookId) {
 
       const updatedLoan = normalizeAdminLoan({
         ...target,
-        status: "REJECTED",
+        status: "RECUSADO",
         rejectedAt: new Date().toISOString(),
         approvedAt: target.approvedAt ?? "",
         borrowedAt: "",
@@ -1397,7 +1467,11 @@ function assignBookToUser(userId, bookId) {
         return current;
       }
 
-      if (target.status !== "READY_FOR_PICKUP") {
+      if (
+        !["AGUARDANDO_RETIRADA", "AGUARDANDO_CONFIRMACAO"].includes(
+          normalizeLoanStatus(target.status)
+        )
+      ) {
         result = {
           success: false,
           message: "Este livro ainda não está liberado para confirmação."
@@ -1409,7 +1483,7 @@ function assignBookToUser(userId, bookId) {
         (loan) =>
           loan.userId === target.userId &&
           loan.id !== target.id &&
-          loan.status === "BORROWED"
+          normalizeLoanStatus(loan.status) === "EMPRESTADO"
       );
 
       if (otherActiveLoan) {
@@ -1423,7 +1497,7 @@ function assignBookToUser(userId, bookId) {
       const updatedLoan = normalizeAdminLoan({
         ...target,
         borrowedAt: new Date().toISOString(),
-        status: "BORROWED",
+        status: "EMPRESTADO",
         dueAt: addDays(new Date().toISOString(), current.settings.globalMaxDays),
         readyUntil: ""
       });
@@ -1464,7 +1538,7 @@ function assignBookToUser(userId, bookId) {
       const updatedLoan = normalizeAdminLoan({
         ...target,
         returnedAt: new Date().toISOString(),
-        status: "RETURNED"
+        status: "DEVOLVIDO"
       });
       const loans = current.loans.map((loan) => (loan.id === loanId ? updatedLoan : loan));
       const next = applyLoanEffects({
@@ -1535,7 +1609,7 @@ function assignBookToUser(userId, bookId) {
         return current;
       }
 
-      if (target.status !== "BORROWED") {
+      if (normalizeLoanStatus(target.status) !== "EMPRESTADO") {
         result = {
           success: false,
           message: "Somente livros emprestados podem ser devolvidos."
@@ -1545,7 +1619,7 @@ function assignBookToUser(userId, bookId) {
 
       const updatedLoan = normalizeAdminLoan({
         ...target,
-        status: "RETURN_REQUESTED",
+        status: "EMPRESTADO",
         returnRequestedAt: new Date().toISOString()
       });
       const loans = current.loans.map((loan) => (loan.id === loanId ? updatedLoan : loan));
@@ -1590,7 +1664,7 @@ function assignBookToUser(userId, bookId) {
         return current;
       }
 
-      if (target.status !== "RETURN_REQUESTED") {
+      if (normalizeLoanStatus(target.status) !== "EMPRESTADO") {
         result = {
           success: false,
           message: "A devolução ainda não foi solicitada por este usuário."
@@ -1601,7 +1675,7 @@ function assignBookToUser(userId, bookId) {
       const updatedLoan = normalizeAdminLoan({
         ...target,
         returnedAt: new Date().toISOString(),
-        status: "RETURNED"
+        status: "DEVOLVIDO"
       });
       const loans = current.loans.map((loan) => (loan.id === loanId ? updatedLoan : loan));
       const next = applyLoanEffects({
@@ -1686,6 +1760,7 @@ function assignBookToUser(userId, bookId) {
       updateRules,
       updateGamification,
       updateSettings,
+      refreshState: refreshStateFromBackend,
       requestLoan,
       joinWaitlist,
       removeWaitlistEntry,
@@ -1850,6 +1925,7 @@ function syncUsersWithLoans(users, loans) {
     const activeLoan = loans.find(
       (loan) =>
         loan.userId === user.id &&
+        loan.type !== "digital" &&
         isActiveLoanStatus(loan.status)
     );
 
@@ -1939,6 +2015,8 @@ function normalizeAdminUser(user) {
 }
 
 function normalizeAdminLoan(loan) {
+  const status = normalizeLoanStatus(loan.status ?? "PENDING_APPROVAL");
+
   return {
     id: loan.id ?? `loan-${Date.now().toString(36)}`,
     userId: loan.userId ?? "",
@@ -1946,7 +2024,7 @@ function normalizeAdminLoan(loan) {
     requesterId: loan.requesterId ?? loan.userId ?? "",
     requestedAt: loan.requestedAt ?? loan.borrowedAt ?? new Date().toISOString(),
     type: loan.type === "digital" ? "digital" : "physical",
-    status: loan.status ?? "PENDING_APPROVAL",
+    status,
     responsible: loan.responsible ?? "",
     location: loan.location ?? "",
     dueAt: loan.dueAt ?? "",
@@ -1960,7 +2038,13 @@ function normalizeAdminLoan(loan) {
 }
 
 function isActiveLoanStatus(status) {
-  return ["PENDING_APPROVAL", "READY_FOR_PICKUP", "BORROWED"].includes(status);
+  const normalized = normalizeLoanStatus(status);
+  return (
+    normalized === "PENDENTE_APROVACAO" ||
+    normalized === "AGUARDANDO_RETIRADA" ||
+    normalized === "AGUARDANDO_CONFIRMACAO" ||
+    normalized === "EMPRESTADO"
+  );
 }
 
 function addHours(baseDate, hours) {
@@ -1995,10 +2079,32 @@ function pushLoanNotification(notifications, book, user, loan, title) {
       book,
       user,
       title,
-      loan.status === "READY_FOR_PICKUP"
+      ["AGUARDANDO_RETIRADA", "AGUARDANDO_CONFIRMACAO"].includes(normalizeLoanStatus(loan.status))
         ? `O livro "${book.title}" está disponível para retirada.`
         : `O livro "${book.title}" foi liberado para leitura.`
     )
+  );
+  return next;
+}
+
+function pushLoanApprovalNotification(notifications, book, user, loan) {
+  const next = notifications.filter((entry) => entry.id !== `notification-${loan.id}`);
+  next.unshift(
+    normalizeNotification({
+      id: `notification-${loan.id}`,
+      userId: user.id,
+      bookId: book.id,
+      type: "loan-approval",
+      title: "Solicitação aprovada",
+      message: `Sua solicitação para "${book.title}" foi aprovada. Procure a biblioteca para retirada.`,
+      actionLabel: "Ver livro",
+      actionTarget: "/livros",
+      createdAt: new Date().toISOString(),
+      metadata: {
+        loanId: loan.id,
+        requesterId: user.id
+      }
+    })
   );
   return next;
 }
@@ -2114,7 +2220,7 @@ function createWaitlistEntry({ waitlists, bookId, userId }) {
       (entry) =>
         entry.bookId === bookId &&
         entry.userId === userId &&
-        entry.status === "WAITING"
+        normalizeWaitlistStatus(entry.status) === "AGUARDANDO_FILA"
     );
 
     return {
@@ -2132,7 +2238,7 @@ function createWaitlistEntry({ waitlists, bookId, userId }) {
     bookId,
     userId,
     requestedAt: new Date().toISOString(),
-    status: "WAITING"
+    status: "AGUARDANDO_FILA"
   });
 
   return {
@@ -2144,7 +2250,9 @@ function createWaitlistEntry({ waitlists, bookId, userId }) {
 
 function getWaitlistPosition(waitlists, bookId, userId) {
   const queue = waitlists.filter(
-    (entry) => entry.bookId === bookId && entry.status !== "CANCELLED" && entry.status !== "EXPIRED"
+    (entry) =>
+      entry.bookId === bookId &&
+      normalizeWaitlistStatus(entry.status) !== "CANCELADO"
   );
   const index = queue.findIndex((entry) => entry.userId === userId);
   return index >= 0 ? index + 1 : queue.length + 1;
@@ -2168,7 +2276,7 @@ function promoteWaitlistAfterReturn({ state, bookId }) {
     const nextWaiting = waitlists.find(
       (entry) =>
         entry.bookId === bookId &&
-        entry.status === "WAITING"
+        normalizeWaitlistStatus(entry.status) === "AGUARDANDO_FILA"
     );
 
     if (!nextWaiting) {
@@ -2178,7 +2286,7 @@ function promoteWaitlistAfterReturn({ state, bookId }) {
     const user = state.users.find((item) => item.id === nextWaiting.userId);
 
     if (!user) {
-      nextWaiting.status = "CANCELLED";
+      nextWaiting.status = "CANCELADO";
       continue;
     }
 
@@ -2190,7 +2298,7 @@ function promoteWaitlistAfterReturn({ state, bookId }) {
       requesterId: user.id,
       requestedAt: now,
       type: "physical",
-      status: "READY_FOR_PICKUP",
+      status: "AGUARDANDO_CONFIRMACAO",
       responsible: "",
       location: "",
       dueAt: reservationUntil,
@@ -2209,7 +2317,7 @@ function promoteWaitlistAfterReturn({ state, bookId }) {
       "Livro disponível para retirada"
     );
 
-    nextWaiting.status = "READY";
+    nextWaiting.status = "AGUARDANDO_CONFIRMACAO";
     nextWaiting.readyAt = now;
     nextWaiting.readyUntil = reservationUntil;
     nextWaiting.loanId = loan.id;
@@ -2232,7 +2340,12 @@ function expireReservations(state) {
   const now = Date.now();
 
   for (const loan of loans) {
-    if (loan.status !== "READY_FOR_PICKUP" || !loan.readyUntil) {
+    if (
+      !["AGUARDANDO_RETIRADA", "AGUARDANDO_CONFIRMACAO"].includes(
+        normalizeLoanStatus(loan.status)
+      ) ||
+      !loan.readyUntil
+    ) {
       continue;
     }
 
@@ -2240,7 +2353,7 @@ function expireReservations(state) {
       continue;
     }
 
-    loan.status = "EXPIRED";
+    loan.status = "CANCELADO";
 
     const book = books.find((item) => item.id === loan.bookId);
     if (book && book.type === "physical") {
@@ -2251,7 +2364,7 @@ function expireReservations(state) {
 
     const relatedWaitlist = waitlists.find((entry) => entry.loanId === loan.id);
     if (relatedWaitlist) {
-      relatedWaitlist.status = "EXPIRED";
+      relatedWaitlist.status = "CANCELADO";
     }
 
     notifications = notifications.map((notification) =>
@@ -2282,7 +2395,7 @@ function normalizeWaitlistEntry(entry) {
     bookId: entry.bookId ?? "",
     userId: entry.userId ?? "",
     requestedAt: entry.requestedAt ?? new Date().toISOString(),
-    status: entry.status ?? "WAITING",
+    status: normalizeWaitlistStatus(entry.status ?? "AGUARDANDO_FILA"),
     readyAt: entry.readyAt ?? "",
     readyUntil: entry.readyUntil ?? "",
     notificationId: entry.notificationId ?? "",
@@ -2337,7 +2450,7 @@ function fromCatalogLoan(loan, books) {
     requesterId: loan.userId,
     requestedAt: loan.borrowedAt,
     type: book?.type ?? "physical",
-    status: loan.status === "returned" ? "RETURNED" : "BORROWED",
+    status: normalizeLoanStatus(loan.status === "returned" ? "DEVOLVIDO" : loan.status),
     responsible: "Equipe Lumiar Flow",
     location: "Biblioteca Lumiar Flow",
     dueAt: loan.dueAt,
@@ -2388,7 +2501,7 @@ function buildMonitoring(state, catalog) {
   const overdueUsers = loans
     .filter(
       (loan) =>
-        loan.status === "BORROWED" &&
+        normalizeLoanStatus(loan.status) === "EMPRESTADO" &&
         loan.dueAt &&
         new Date(loan.dueAt).getTime() < Date.now()
     )

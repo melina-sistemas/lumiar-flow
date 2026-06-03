@@ -2,6 +2,7 @@
 import htm from "htm";
 import { AdminPageLayout } from "../../components/AdminPageLayout.js";
 import { createLoanApiClient } from "../../services/loan-api.js";
+import { isLoanReturned } from "../../features/books/loan-status.js";
 import { createPlaceholderCover, resolveBookCoverSource } from "../../services/google-books.js";
 import { extractPdfTextFromFile } from "../../features/books/pdf-text.js";
 
@@ -84,7 +85,7 @@ export function AdminBooksPage({ books, users, loans, actions, apiBaseUrl }) {
     const activeUsers = users.filter(
       (user) => user.role === "user" || user.role === "staff" || user.role === "admin"
     ).length;
-    const completedLoans = loans.filter((loan) => loan.status === "RETURNED").length;
+    const completedLoans = loans.filter((loan) => isLoanReturned(loan.status)).length;
     const ranking = [...users]
       .sort(
         (left, right) =>
