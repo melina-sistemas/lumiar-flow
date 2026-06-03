@@ -1,3 +1,5 @@
+﻿import { normalizeUserRole } from "../../../security/auth.js";
+
 export class SupabaseLoanRepository {
   constructor(config) {
     this.config = config;
@@ -163,7 +165,7 @@ function mapUser(row) {
     id: row.id,
     name: row.name,
     email: row.email,
-    role: row.role,
+    role: normalizeUserRole(row.role),
     level: row.level,
     readingScore: row.reading_score,
     activeLoanId: row.active_loan_id ?? undefined,
@@ -176,7 +178,7 @@ function mapUserToRow(user) {
     id: user.id,
     name: user.name,
     email: user.email,
-    role: user.role,
+    role: normalizeUserRole(user.role),
     level: user.level,
     reading_score: user.readingScore,
     active_loan_id: user.activeLoanId ?? null,

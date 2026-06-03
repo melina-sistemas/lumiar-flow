@@ -1314,6 +1314,28 @@ function PendingApprovalPage({ onLogout }) {
   `;
 }
 
+function sanitizeApiBaseUrl(value) {
+  const raw = String(value ?? "").trim();
+
+  if (!raw) {
+    return "";
+  }
+
+  if (raw === "/api") {
+    return "/api";
+  }
+
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return parsed.origin + parsed.pathname.replace(/\/$/, "");
+    }
+  } catch {
+    return "";
+  }
+
+  return "";
+}
 function getApiBaseUrl() {
   const queryOverrideBaseUrl = readApiBaseUrlQueryOverride();
   if (queryOverrideBaseUrl) {
@@ -1330,13 +1352,13 @@ function getApiBaseUrl() {
     return overrideBaseUrl;
   }
 
-  const configuredBaseUrl = String(import.meta.env.VITE_API_BASE_URL ?? "").trim();
+  const configuredBaseUrl = sanitizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
 
   if (configuredBaseUrl) {
     return configuredBaseUrl;
   }
 
-  return "/api";
+  return "https://lumiar-flowapi-production.up.railway.app";
 }
 
 function getVercelPreviewApiBaseUrl() {
@@ -1365,10 +1387,11 @@ function readApiBaseUrlQueryOverride() {
   try {
     const url = new URL(window.location.href);
     const queryOverride = String(url.searchParams.get("apiBaseUrl") ?? "").trim();
+    const sanitizedOverride = sanitizeApiBaseUrl(queryOverride);
 
-    if (queryOverride) {
-      window.localStorage?.setItem(API_BASE_URL_OVERRIDE_KEY, queryOverride);
-      return queryOverride;
+    if (sanitizedOverride) {
+      window.localStorage?.setItem(API_BASE_URL_OVERRIDE_KEY, sanitizedOverride);
+      return sanitizedOverride;
     }
   } catch {
     return "";
@@ -1383,7 +1406,15 @@ function readApiBaseUrlStoredOverride() {
   }
 
   try {
-    return String(window.localStorage?.getItem(API_BASE_URL_OVERRIDE_KEY) ?? "").trim();
+    const storedOverride = sanitizeApiBaseUrl(
+      window.localStorage?.getItem(API_BASE_URL_OVERRIDE_KEY)
+    );
+
+    if (!storedOverride) {
+      window.localStorage?.removeItem(API_BASE_URL_OVERRIDE_KEY);
+    }
+
+    return storedOverride;
   } catch {
     return "";
   }
@@ -1792,5 +1823,4 @@ function filterBooks(books, activeLoans, filter) {
       return books;
   }
 }
-
 

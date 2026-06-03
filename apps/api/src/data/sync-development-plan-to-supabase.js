@@ -1,3 +1,4 @@
+import { normalizeUserRole } from "../security/auth.js";
 import { loadEnvFile } from "../config/load-env.js";
 import { getSupabaseConfig } from "../config/supabase-config.js";
 import { createDevelopmentPlanCatalog } from "./development-plan-data.js";
@@ -124,7 +125,7 @@ function mapUserToRow(user) {
     id: user.id,
     name: user.name,
     email: user.email,
-    role: user.role,
+    role: normalizeUserRole(user.role),
     level: user.level,
     reading_score: user.readingScore,
     active_loan_id: user.activeLoanId ?? null,
