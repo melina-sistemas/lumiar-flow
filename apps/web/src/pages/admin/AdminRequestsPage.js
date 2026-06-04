@@ -420,7 +420,7 @@ export function AdminRequestsPage({ loans, books, users, actions }) {
                   </button>
                 </div>
 
-                <label className="admin-form-field admin-form-span-2 rejection-modal-field">
+                <label className="admin-form-field rejection-modal-field">
                   <span>Motivo obrigatório</span>
                   <textarea
                     rows="6"

@@ -2840,7 +2840,10 @@ textarea {
 }
 
 .rejection-modal-field {
+  display: grid;
+  width: 100%;
   gap: 10px;
+  align-self: stretch;
 }
 
 .rejection-modal-field > span {
@@ -2851,6 +2854,7 @@ textarea {
 
 .rejection-modal-textarea {
   width: 100%;
+  box-sizing: border-box;
   min-height: 120px;
   resize: vertical;
   padding: 12px 14px;
