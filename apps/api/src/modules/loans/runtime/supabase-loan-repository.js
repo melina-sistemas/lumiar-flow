@@ -238,10 +238,10 @@ function mapLoanToRow(loan) {
     user_id: loan.userId,
     book_id: loan.bookId,
     level_at_loan: loan.levelAtLoan,
-    borrowed_at: loan.borrowedAt,
-    due_at: loan.dueAt,
+    borrowed_at: toNullableTimestamp(loan.borrowedAt),
+    due_at: toNullableTimestamp(loan.dueAt),
     status: mapLoanStatusToDatabase(loan.status),
-    returned_at: loan.returnedAt ?? null,
+    returned_at: toNullableTimestamp(loan.returnedAt),
     return_record_id: loan.returnRecordId ?? null,
     updated_at: new Date().toISOString()
   };
@@ -255,6 +255,11 @@ function mapLoanStatusToDatabase(status) {
   }
 
   return "active";
+}
+
+function toNullableTimestamp(value) {
+  const text = String(value ?? "").trim();
+  return text ? text : null;
 }
 
 function mapReturn(row) {
@@ -282,7 +287,7 @@ function mapReturnToRow(returnRecord) {
     loan_id: returnRecord.loanId,
     user_id: returnRecord.userId,
     book_id: returnRecord.bookId,
-    returned_at: returnRecord.returnedAt,
+    returned_at: toNullableTimestamp(returnRecord.returnedAt),
     is_late: returnRecord.isLate,
     days_late: returnRecord.daysLate,
     score_awarded: returnRecord.scoreAwarded,
