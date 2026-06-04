@@ -2227,7 +2227,16 @@ function normalizeAdminUser(user) {
 }
 
 function normalizeAdminLoan(loan) {
-  const status = normalizeLoanStatus(loan.status ?? "PENDING_APPROVAL");
+  let status = normalizeLoanStatus(loan.status ?? "PENDING_APPROVAL");
+
+  if (loan.archivedAt) {
+    status = "ARQUIVADO";
+  } else if (
+    String(loan.rejectedAt ?? "").trim() ||
+    String(loan.rejectionReason ?? "").trim()
+  ) {
+    status = "RECUSADO";
+  }
 
   return {
     id: loan.id ?? `loan-${Date.now().toString(36)}`,

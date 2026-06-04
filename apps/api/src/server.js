@@ -1443,6 +1443,14 @@ async function mirrorLoanPickupIntoAdminState(adminStateStore, loan) {
 }
 
 function normalizeAdminLoan(loan) {
+  let status = normalizeLoanStatus(loan?.status);
+
+  if (loan?.archivedAt) {
+    status = "ARQUIVADO";
+  } else if (String(loan?.rejectedAt ?? "").trim() || String(loan?.rejectionReason ?? "").trim()) {
+    status = "RECUSADO";
+  }
+
   return {
     id: loan?.id ?? `loan-${randomUUID()}`,
     userId: String(loan?.userId ?? ""),
@@ -1451,7 +1459,7 @@ function normalizeAdminLoan(loan) {
     requestedAt: loan?.requestedAt ?? loan?.borrowedAt ?? new Date().toISOString(),
     levelAtLoan: loan?.levelAtLoan ?? loan?.level ?? "",
     type: String(loan?.type ?? "").trim().toLowerCase() === "digital" ? "digital" : "physical",
-    status: normalizeLoanStatus(loan?.status),
+    status,
     responsible: loan?.responsible ?? "",
     location: loan?.location ?? "",
     dueAt: loan?.dueAt ?? "",
