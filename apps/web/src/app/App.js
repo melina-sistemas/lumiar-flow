@@ -20,7 +20,6 @@ import { AdminRequestsPage } from "../pages/admin/AdminRequestsPage.js";
 import { AdminUsersPage } from "../pages/admin/AdminUsersPage.js";
 import { AdminRulesPage } from "../pages/admin/AdminRulesPage.js";
 import { AdminGamificationPage } from "../pages/admin/AdminGamificationPage.js";
-import { AdminLoansPage } from "../pages/admin/AdminLoansPage.js";
 import { AdminMonitoringPage } from "../pages/admin/AdminMonitoringPage.js";
 import { AdminSettingsPage } from "../pages/admin/AdminSettingsPage.js";
 import { createDevelopmentPlanCatalog } from "../data/development-plan-data.js";
@@ -1163,7 +1162,7 @@ export function App() {
             element=${renderAdminPage(
               activeAuthUser,
               adminPanel,
-              React.createElement(AdminLoansPage, {
+              React.createElement(AdminRequestsPage, {
                 loans: adminPanel.loans,
                 books: adminPanel.books,
                 users: adminPanel.users,
