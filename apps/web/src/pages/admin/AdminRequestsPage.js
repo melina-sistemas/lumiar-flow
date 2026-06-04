@@ -1,9 +1,12 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import htm from "htm";
 import { AdminPageLayout } from "../../components/AdminPageLayout.js";
 import {
+  getLoanStatusLabel,
+  isLoanApproved,
   isLoanBorrowed,
-  isLoanPendingApproval
+  isLoanPendingApproval,
+  isLoanReturnRequested
 } from "../../features/books/loan-status.js";
 
 const html = htm.bind(React.createElement);
@@ -12,6 +15,7 @@ export function AdminRequestsPage({ loans, books, users, actions }) {
   const [approvalData, setApprovalData] = useState({});
   const [feedback, setFeedback] = useState("");
   const [now, setNow] = useState(() => Date.now());
+  const [rejectionModal, setRejectionModal] = useState(null);
 
   useEffect(() => {
     const timer = globalThis.setInterval(() => setNow(Date.now()), 60 * 1000);
@@ -23,8 +27,13 @@ export function AdminRequestsPage({ loans, books, users, actions }) {
     [loans]
   );
 
+  const returnRequests = useMemo(
+    () => loans.filter((loan) => isLoanReturnRequested(loan.status)),
+    [loans]
+  );
+
   const activeLoans = useMemo(
-    () => loans.filter((loan) => isLoanBorrowed(loan.status)),
+    () => loans.filter((loan) => isLoanBorrowed(loan.status) || isLoanApproved(loan.status)),
     [loans]
   );
 
@@ -38,37 +47,147 @@ export function AdminRequestsPage({ loans, books, users, actions }) {
     setFeedback(result.message);
   }
 
-  function handleReject(loanId) {
-    const confirmed = globalThis.confirm(
-      "Deseja reprovar esta solicitação? O usuário será notificado."
-    );
+  function openRejectModal(loan, kind, bookTitle = "livro") {
+    setRejectionModal({
+      kind,
+      loanId: loan.id,
+      reason: kind === "loan" ? String(loan.rejectionReason ?? loan.notes ?? "") : "",
+      addToWaitlist: Boolean(loan.rejectionAddsToWaitlist),
+      title:
+        kind === "loan"
+          ? `Recusar "${bookTitle}"`
+          : `Recusar devolução de "${bookTitle}"`
+    });
+  }
 
-    if (!confirmed) {
+  function handleRejectSubmit() {
+    if (!rejectionModal) {
       return;
     }
 
-    const result = actions.rejectLoan(loanId);
+    const reason = String(rejectionModal.reason ?? "").trim();
+    if (!reason) {
+      setFeedback("Informe um motivo para continuar.");
+      return;
+    }
+
+    const result =
+      rejectionModal.kind === "loan"
+        ? actions.rejectLoan(rejectionModal.loanId, {
+            reason,
+            addToWaitlist: rejectionModal.addToWaitlist
+          })
+        : actions.rejectReturn(rejectionModal.loanId, { reason });
+
     setFeedback(result.message);
+    setRejectionModal(null);
   }
+
+  const actionsBar = html`
+    <button
+      type="button"
+      className="admin-primary"
+      onClick=${() => {
+        const pending = pendingRequests.slice();
+        let approved = 0;
+
+        for (const loan of pending) {
+          const approval = approvalData[loan.id] ?? {
+            responsible: loan.responsible || "Equipe Lumiar Flow",
+            location: loan.location || "Biblioteca Lumiar Flow",
+            dueAt:
+              loan.dueAt?.slice?.(0, 10) ||
+              new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+          };
+          const result = actions.approveLoan(loan.id, {
+            responsible: approval.responsible,
+            location: approval.location,
+            dueAt: new Date(approval.dueAt).toISOString()
+          });
+
+          if (result.success) {
+            approved += 1;
+          }
+        }
+
+        setFeedback(
+          approved > 0
+            ? `${approved} solicitação(ões) aprovada(s).`
+            : "Nenhuma solicitação pendente foi aprovada."
+        );
+      }}
+    >
+      Aprovar tudo
+    </button>
+  `;
 
   return html`
     <${AdminPageLayout}
-      title="Solicitações pendentes"
+      title="Solicitações"
       breadcrumb="Solicitações"
-      description="Veja pedidos em análise e o histórico dos livros já liberados para leitura."
+      description="Controle aprovações, recusas, devoluções e o histórico operacional da biblioteca."
+      actions=${actionsBar}
     >
       ${feedback ? html`<article className="admin-card admin-feedback">${feedback}</article>` : null}
 
+      <section className="admin-summary-grid">
+        <article className="admin-summary-card">
+          <span>Pendentes</span>
+          <strong>${pendingRequests.length}</strong>
+          <small>Solicitações aguardando análise.</small>
+        </article>
+        <article className="admin-summary-card">
+          <span>Devoluções</span>
+          <strong>${returnRequests.length}</strong>
+          <small>Pedidos de devolução para aprovar ou recusar.</small>
+        </article>
+        <article className="admin-summary-card">
+          <span>Aprovados</span>
+          <strong>${activeLoans.filter((loan) => isLoanApproved(loan.status)).length}</strong>
+          <small>Livros liberados aguardando retirada.</small>
+        </article>
+        <article className="admin-summary-card">
+          <span>Emprestados</span>
+          <strong>${activeLoans.filter((loan) => isLoanBorrowed(loan.status)).length}</strong>
+          <small>Leituras em andamento.</small>
+        </article>
+      </section>
+
       <article className="admin-card admin-table-card">
         <div className="admin-card-header">
-          <h3>Fila de aprovação</h3>
+          <div>
+            <h3>Fila de aprovação</h3>
+            <p className="admin-helper">Aprove, recuse e, quando fizer sentido, envie o usuário para a fila.</p>
+          </div>
           <span className="admin-pill">${pendingRequests.length} pendências</span>
         </div>
 
-        ${pendingRequests.length === 0
+        ${renderLoanTable({
+          emptyMessage: "Nenhuma solicitação aguardando aprovação.",
+          loans: pendingRequests,
+          users,
+          books,
+          now,
+          approvals: approvalData,
+          onUpdateApproval: setApprovalData,
+          onApprove: handleApprove,
+          onReject: (loan) => openRejectModal(loan, "loan", getBookTitleFromLoan(loan, books))
+        })}
+      </article>
+
+      <article className="admin-card admin-table-card">
+        <div className="admin-card-header">
+          <div>
+            <h3>Devoluções solicitadas</h3>
+            <p className="admin-helper">Cada pedido precisa de aprovação ou recusa com motivo.</p>
+          </div>
+          <span className="admin-pill">${returnRequests.length} solicitações</span>
+        </div>
+
+        ${returnRequests.length === 0
           ? html`
               <div className="admin-empty">
-                <strong>Nenhuma solicitação aguardando aprovação.</strong>
+                <strong>Nenhuma devolução solicitada no momento.</strong>
               </div>
             `
           : html`
@@ -79,78 +198,43 @@ export function AdminRequestsPage({ loans, books, users, actions }) {
                       <th>Usuário</th>
                       <th>Livro</th>
                       <th>Solicitado em</th>
-                      <th>Responsável</th>
-                      <th>Local</th>
                       <th>Prazo</th>
+                      <th>Status</th>
                       <th>Ações</th>
                     </tr>
                   </thead>
                   <tbody>
-                    ${pendingRequests.map((loan) => {
+                    ${returnRequests.map((loan) => {
                       const user = users.find((item) => item.id === loan.userId);
                       const book = books.find((item) => item.id === loan.bookId);
-                      const approval = approvalData[loan.id] ?? {
-                        responsible: loan.responsible ?? "",
-                        location: loan.location ?? "",
-                        dueAt: loan.dueAt ? String(loan.dueAt).slice(0, 10) : ""
-                      };
-
                       return html`
                         <tr key=${loan.id}>
                           <td>${user?.name ?? "-"}</td>
                           <td>${book?.title ?? "-"}</td>
-                          <td>${formatDateTime(loan.requestedAt)}</td>
+                          <td>${formatDateTime(loan.returnRequestedAt || loan.requestedAt)}</td>
+                          <td>${formatDateTime(loan.dueAt)}</td>
                           <td>
-                            <input
-                              value=${approval.responsible}
-                              onInput=${(event) =>
-                                updateApprovalData(
-                                  setApprovalData,
-                                  loan.id,
-                                  "responsible",
-                                  event.target.value
-                                )}
-                            />
-                          </td>
-                          <td>
-                            <input
-                              value=${approval.location}
-                              onInput=${(event) =>
-                                updateApprovalData(
-                                  setApprovalData,
-                                  loan.id,
-                                  "location",
-                                  event.target.value
-                                )}
-                            />
-                          </td>
-                          <td>
-                            <input
-                              type="date"
-                              value=${approval.dueAt}
-                              onInput=${(event) =>
-                                updateApprovalData(
-                                  setApprovalData,
-                                  loan.id,
-                                  "dueAt",
-                                  event.target.value
-                                )}
-                            />
+                            <span className="admin-badge status-active">
+                              ${getLoanStatusLabel(loan.status)}
+                            </span>
                           </td>
                           <td className="admin-table-actions">
                             <button
                               type="button"
                               className="admin-link"
-                              onClick=${() => handleApprove(loan.id, approval)}
+                              onClick=${() => {
+                                const result = actions.confirmReturn(loan.id);
+                                setFeedback(result.message);
+                              }}
                             >
-                              Aprovar
+                              Aprovar devolução
                             </button>
                             <button
                               type="button"
                               className="admin-link danger"
-                              onClick=${() => handleReject(loan.id)}
+                              onClick=${() => openRejectModal(loan, "return", book?.title ?? "Livro")}
                             >
-                              Reprovar
+                              Recusar devolução
                             </button>
                           </td>
                         </tr>
@@ -165,8 +249,8 @@ export function AdminRequestsPage({ loans, books, users, actions }) {
       <article className="admin-card admin-table-card">
         <div className="admin-card-header">
           <div>
-                  <h3>Empréstimos liberados</h3>
-            <p className="admin-helper">Livros já emprestados com prazo, responsável e tempo restante.</p>
+            <h3>Empréstimos liberados</h3>
+            <p className="admin-helper">Livros aprovados e já emprestados com prazo e tempo restante.</p>
           </div>
           <span className="admin-pill">${activeLoans.length} itens</span>
         </div>
@@ -174,7 +258,7 @@ export function AdminRequestsPage({ loans, books, users, actions }) {
         ${activeLoans.length === 0
           ? html`
               <div className="admin-empty">
-                <strong>Nenhum livro emprestado no momento.</strong>
+                <strong>Nenhum livro emprestado ou aprovado no momento.</strong>
               </div>
             `
           : html`
@@ -182,26 +266,60 @@ export function AdminRequestsPage({ loans, books, users, actions }) {
                 <table className="admin-table">
                   <thead>
                     <tr>
-                      <th>ssuario</th>
+                      <th>Usuário</th>
                       <th>Livro</th>
+                      <th>Estado</th>
                       <th>Liberado em</th>
-                      <th>Liberado por</th>
                       <th>Prazo</th>
                       <th>Falta</th>
+                      <th>Ações</th>
                     </tr>
                   </thead>
                   <tbody>
                     ${activeLoans.map((loan) => {
                       const user = users.find((item) => item.id === loan.userId);
                       const book = books.find((item) => item.id === loan.bookId);
+                      const statusLabel = getLoanStatusLabel(loan.status);
                       return html`
                         <tr key=${loan.id}>
                           <td>${user?.name ?? "-"}</td>
                           <td>${book?.title ?? "-"}</td>
+                          <td>
+                            <span className="admin-badge status-active">${statusLabel}</span>
+                          </td>
                           <td>${formatReleaseDate(loan)}</td>
-                          <td>${loan.responsible || "-"}</td>
                           <td>${formatDateTime(loan.dueAt)}</td>
                           <td>${formatRemainingTime(loan.dueAt, now)}</td>
+                          <td className="admin-table-actions">
+                            ${isLoanApproved(loan.status)
+                              ? html`
+                                  <button
+                                    type="button"
+                                    className="admin-link"
+                                    onClick=${() => {
+                                      const result = actions.confirmPickup(loan.id);
+                                      setFeedback(result.message);
+                                    }}
+                                  >
+                                    Confirmar retirada
+                                  </button>
+                                `
+                              : null}
+                            ${isLoanBorrowed(loan.status)
+                              ? html`
+                                  <button
+                                    type="button"
+                                    className="admin-link"
+                                    onClick=${() => {
+                                      const result = actions.markReturned(loan.id);
+                                      setFeedback(result.message);
+                                    }}
+                                  >
+                                    Registrar devolução
+                                  </button>
+                                `
+                              : null}
+                          </td>
                         </tr>
                       `;
                     })}
@@ -210,7 +328,166 @@ export function AdminRequestsPage({ loans, books, users, actions }) {
               </div>
             `}
       </article>
+
+      ${rejectionModal
+        ? html`
+            <div className="admin-modal-backdrop" onClick=${() => setRejectionModal(null)}>
+              <div className="admin-modal rejection-modal" onClick=${(event) => event.stopPropagation()}>
+                <div className="admin-modal-header">
+                  <div>
+                    <h3>${rejectionModal.title}</h3>
+                    <p>Explique o motivo da recusa antes de concluir a ação.</p>
+                  </div>
+                  <button type="button" className="admin-modal-close" onClick=${() => setRejectionModal(null)}>
+                    ×
+                  </button>
+                </div>
+
+                <label className="admin-form-field admin-form-span-2">
+                  <span>Motivo obrigatório</span>
+                  <textarea
+                    rows="5"
+                    value=${rejectionModal.reason}
+                    onInput=${(event) =>
+                      setRejectionModal((current) => ({
+                        ...current,
+                        reason: event.target.value
+                      }))}
+                    placeholder="Descreva o motivo da recusa."
+                  ></textarea>
+                </label>
+
+                ${rejectionModal.kind === "loan"
+                  ? html`
+                      <label className="admin-checkbox-field">
+                        <input
+                          type="checkbox"
+                          checked=${rejectionModal.addToWaitlist}
+                          onChange=${(event) =>
+                            setRejectionModal((current) => ({
+                              ...current,
+                              addToWaitlist: event.target.checked
+                            }))}
+                        />
+                        <span>Recusar e adicionar à fila de espera</span>
+                      </label>
+                    `
+                  : null}
+
+                <div className="admin-modal-actions">
+                  <button type="button" className="admin-secondary" onClick=${() => setRejectionModal(null)}>
+                    Cancelar
+                  </button>
+                  <button type="button" className="admin-primary" onClick=${handleRejectSubmit}>
+                    Confirmar recusa
+                  </button>
+                </div>
+              </div>
+            </div>
+          `
+        : null}
     <//>
+  `;
+}
+
+function renderLoanTable({
+  emptyMessage,
+  loans,
+  users,
+  books,
+  approvals,
+  onUpdateApproval,
+  onApprove,
+  onReject
+}) {
+  if (loans.length === 0) {
+    return html`
+      <div className="admin-empty">
+        <strong>${emptyMessage}</strong>
+      </div>
+    `;
+  }
+
+  return html`
+    <div className="admin-table-wrapper">
+      <table className="admin-table">
+        <thead>
+          <tr>
+            <th>Usuário</th>
+            <th>Livro</th>
+            <th>Solicitado em</th>
+            <th>Responsável</th>
+            <th>Local</th>
+            <th>Prazo</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${loans.map((loan) => {
+            const user = users.find((item) => item.id === loan.userId);
+            const book = books.find((item) => item.id === loan.bookId);
+            const approval = approvals[loan.id] ?? {
+              responsible: loan.responsible ?? "",
+              location: loan.location ?? "",
+              dueAt: loan.dueAt ? String(loan.dueAt).slice(0, 10) : ""
+            };
+
+            return html`
+              <tr key=${loan.id}>
+                <td>${user?.name ?? "-"}</td>
+                <td>
+                  <div className="admin-cell-stack">
+                    <strong>${book?.title ?? "-"}</strong>
+                    ${book?.type === "physical"
+                      ? html`<small>Livro físico</small>`
+                      : html`<small>Livro digital</small>`}
+                  </div>
+                </td>
+                <td>${formatDateTime(loan.requestedAt)}</td>
+                <td>
+                  <input
+                    value=${approval.responsible}
+                    onInput=${(event) =>
+                      updateApprovalData(onUpdateApproval, loan.id, "responsible", event.target.value)}
+                  />
+                </td>
+                <td>
+                  <input
+                    value=${approval.location}
+                    onInput=${(event) =>
+                      updateApprovalData(onUpdateApproval, loan.id, "location", event.target.value)}
+                  />
+                </td>
+                <td>
+                  <input
+                    type="date"
+                    value=${approval.dueAt}
+                    onInput=${(event) =>
+                      updateApprovalData(onUpdateApproval, loan.id, "dueAt", event.target.value)}
+                  />
+                </td>
+                <td className="admin-table-actions">
+                  <button
+                    type="button"
+                    className="admin-link"
+                    onClick=${() => onApprove(loan.id, approval)}
+                  >
+                    Aprovar
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-link danger"
+                    onClick=${() => onReject(loan)}
+                  >
+                    Recusar
+                  </button>
+                </td>
+              </tr>
+            `;
+          })}
+        </tbody>
+      </table>
+    </div>
   `;
 }
 
@@ -222,6 +499,11 @@ function updateApprovalData(setter, loanId, field, value) {
       [field]: value
     }
   }));
+}
+
+function getBookTitleFromLoan(loan, books) {
+  const book = books.find((item) => item.id === loan.bookId);
+  return book?.title ?? "livro";
 }
 
 function formatDateTime(value) {
@@ -236,7 +518,7 @@ function formatDateTime(value) {
 }
 
 function formatReleaseDate(loan) {
-  return formatDateTime(loan.borrowedAt || loan.approvedAt || loan.requestedAt);
+  return formatDateTime(loan.approvedAt || loan.borrowedAt || loan.requestedAt);
 }
 
 function formatRemainingTime(dueAt, now) {
@@ -258,7 +540,5 @@ function formatRemainingTime(dueAt, now) {
     return "Hoje";
   }
 
-  return `Atrasado ha ${Math.abs(diffDays)} dias`;
+  return `Atrasado há ${Math.abs(diffDays)} dias`;
 }
-
-

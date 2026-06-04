@@ -216,9 +216,7 @@ export function createApiServer(repository, adminStateStore) {
 
         const normalizedLoan = normalizeAdminLoan(targetLoan);
         if (
-          !["AGUARDANDO_RETIRADA", "AGUARDANDO_CONFIRMACAO"].includes(
-            normalizeLoanStatus(normalizedLoan.status)
-          )
+          normalizeLoanStatus(normalizedLoan.status) !== "APROVADO"
         ) {
           return sendJson(response, 400, {
             success: false,
@@ -1461,6 +1459,11 @@ function normalizeAdminLoan(loan) {
     rejectedAt: loan?.rejectedAt ?? "",
     borrowedAt: loan?.borrowedAt ?? "",
     returnedAt: loan?.returnedAt ?? "",
+    returnRequestedAt: loan?.returnRequestedAt ?? "",
+    returnApprovedAt: loan?.returnApprovedAt ?? "",
+    returnRejectedAt: loan?.returnRejectedAt ?? "",
+    rejectionReason: loan?.rejectionReason ?? "",
+    rejectionAddsToWaitlist: Boolean(loan?.rejectionAddsToWaitlist),
     notes: loan?.notes ?? ""
   };
 }
@@ -1474,21 +1477,26 @@ function normalizeLoanStatus(status) {
     case "EXPIRED":
       return "DISPONIVEL";
     case "READY_FOR_PICKUP":
-      return "AGUARDANDO_CONFIRMACAO";
+      return "APROVADO";
     case "PENDING_APPROVAL":
     case "PENDENTE_APROVACAO":
     case "PENDENTE DE APROVACAO":
       return "PENDENTE_APROVACAO";
+    case "APROVADO":
     case "AGUARDANDO_RETIRADA":
-      return "AGUARDANDO_RETIRADA";
     case "AGUARDANDO_CONFIRMACAO":
-      return "AGUARDANDO_CONFIRMACAO";
+      return "APROVADO";
     case "BORROWED":
     case "ACTIVE":
     case "OVERDUE":
     case "EMPRESTADO":
-    case "RETURN_REQUESTED":
       return "EMPRESTADO";
+    case "RETURN_REQUESTED":
+    case "DEVOLUCAO_SOLICITADA":
+      return "DEVOLUCAO_SOLICITADA";
+    case "RETURN_APPROVED":
+    case "DEVOLUCAO_APROVADA":
+      return "DEVOLUCAO_APROVADA";
     case "WAITING":
     case "AGUARDANDO_FILA":
     case "READY":
@@ -1512,10 +1520,10 @@ function isActiveLoanStatus(status) {
 
   return (
     normalized === "PENDENTE_APROVACAO" ||
-    normalized === "AGUARDANDO_RETIRADA" ||
-    normalized === "AGUARDANDO_CONFIRMACAO" ||
+    normalized === "APROVADO" ||
     normalized === "EMPRESTADO" ||
-    normalized === "AGUARDANDO_FILA"
+    normalized === "DEVOLUCAO_SOLICITADA" ||
+    normalized === "DEVOLUCAO_APROVADA"
   );
 }
 

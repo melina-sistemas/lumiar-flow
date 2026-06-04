@@ -3,6 +3,7 @@ import htm from "htm";
 import { AdminPageLayout } from "../../components/AdminPageLayout.js";
 import {
   getLoanStatusLabel,
+  isLoanApproved,
   isLoanBorrowed,
   isLoanPendingApproval,
   isLoanReturned,
@@ -48,9 +49,7 @@ export function AdminLoansPage({ loans, books, users, actions }) {
   const summary = useMemo(
     () => ({
       pending: loans.filter((loan) => isLoanPendingApproval(loan.status)).length,
-      ready: loans.filter((loan) =>
-        ["AGUARDANDO_RETIRADA", "AGUARDANDO_CONFIRMACAO"].includes(normalizeLoanStatus(loan.status))
-      ).length,
+      ready: loans.filter((loan) => isLoanApproved(loan.status)).length,
       borrowed: loans.filter((loan) => isLoanBorrowed(loan.status)).length,
       returned: loans.filter((loan) => isLoanReturned(loan.status)).length
     }),
@@ -111,8 +110,10 @@ export function AdminLoansPage({ loans, books, users, actions }) {
   const statusOptions = [
     { value: "all", label: "Todos os status" },
     { value: "PENDENTE_APROVACAO", label: "Pendentes" },
-    { value: "AGUARDANDO_RETIRADA", label: "Aguardando retirada" },
+    { value: "APROVADO", label: "Aprovados" },
     { value: "EMPRESTADO", label: "Emprestados" },
+    { value: "DEVOLUCAO_SOLICITADA", label: "Devolução solicitada" },
+    { value: "RECUSADO", label: "Recusados" },
     { value: "DEVOLVIDO", label: "Devolvidos" }
   ];
 
@@ -436,9 +437,7 @@ export function AdminLoansPage({ loans, books, users, actions }) {
                           `
                         : null}
 
-                      ${["AGUARDANDO_RETIRADA", "AGUARDANDO_CONFIRMACAO"].includes(
-                        normalizeLoanStatus(loan.status)
-                      )
+                      ${isLoanApproved(loan.status)
                         ? html`
                             <button
                               type="button"

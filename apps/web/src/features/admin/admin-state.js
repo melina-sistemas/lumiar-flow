@@ -6,8 +6,10 @@ import {
   MAX_WAITLIST_BOOKS_PER_USER,
   countUserWaitlistEntries,
   getWaitlistEntry,
+  isLoanApproved,
   isLoanBorrowed,
   isLoanPendingApproval,
+  isLoanReturnRequested,
   isLoanReturned,
   isWaitlistEntryActive,
   normalizeLoanStatus,
@@ -1045,7 +1047,7 @@ function assignBookToUser(userId, bookId) {
       const hasActiveBorrowedLoan = current.loans.some(
         (loan) =>
           loan.userId === input.userId &&
-          normalizeLoanStatus(loan.status) === "EMPRESTADO" &&
+          isActiveLoanStatus(loan.status) &&
           loan.type !== "digital"
       );
 
@@ -1337,7 +1339,7 @@ function assignBookToUser(userId, bookId) {
         (loan) =>
           loan.userId === target.userId &&
           loan.id !== target.id &&
-          normalizeLoanStatus(loan.status) === "EMPRESTADO" &&
+          isActiveLoanStatus(loan.status) &&
           loan.type !== "digital"
       );
 
@@ -1361,15 +1363,17 @@ function assignBookToUser(userId, bookId) {
         ...target,
         ...changes,
         approvedAt: new Date().toISOString(),
-        borrowedAt: new Date().toISOString(),
-        dueAt: changes.dueAt ? new Date(changes.dueAt).toISOString() : addDays(new Date().toISOString(), current.settings.globalMaxDays),
+        borrowedAt: "",
+        dueAt: changes.dueAt
+          ? new Date(changes.dueAt).toISOString()
+          : addDays(new Date().toISOString(), current.settings.globalMaxDays),
         readyUntil: "",
-        status: "AGUARDANDO_RETIRADA"
+        status: "APROVADO"
       });
       const loans = current.loans.map((loan) => (loan.id === loanId ? updatedLoan : loan));
       result = {
         success: true,
-        message: "Solicitação aprovada e empréstimo ativo."
+        message: "Solicitação aprovada. O livro agora está aguardando retirada."
       };
 
       return {
@@ -1416,6 +1420,26 @@ function assignBookToUser(userId, bookId) {
         return current;
       }
 
+      const reason = String(changes.reason ?? "").trim();
+      if (!reason) {
+        result = {
+          success: false,
+          message: "Informe um motivo para recusar a solicitação."
+        };
+        return current;
+      }
+
+      const shouldJoinWaitlist = Boolean(changes.addToWaitlist ?? changes.addToQueue);
+      const existingWaitlist = getWaitlistEntry(current.waitlists, book.id, user.id);
+      const nextWaitlist =
+        shouldJoinWaitlist && book.type === "physical"
+          ? createWaitlistEntry({
+              waitlists: current.waitlists,
+              bookId: book.id,
+              userId: user.id
+            })
+          : null;
+
       const updatedLoan = normalizeAdminLoan({
         ...target,
         status: "RECUSADO",
@@ -1424,24 +1448,39 @@ function assignBookToUser(userId, bookId) {
         borrowedAt: "",
         dueAt: "",
         readyUntil: "",
-        notes: changes.reason ? String(changes.reason) : target.notes
+        notes: reason,
+        rejectionReason: reason,
+        rejectionAddsToWaitlist: shouldJoinWaitlist,
+        returnRequestedAt: "",
+        returnApprovedAt: "",
+        returnRejectedAt: ""
       });
       const loans = current.loans.map((loan) => (loan.id === loanId ? updatedLoan : loan));
       result = {
         success: true,
-        message: "Solicitação reprovada."
+        message: shouldJoinWaitlist
+          ? existingWaitlist
+            ? "Solicitação recusada. O usuário já estava na fila de espera."
+            : "Solicitação recusada e usuário adicionado à fila de espera."
+          : "Solicitação recusada."
       };
+
+      const nextNotifications = pushRejectedLoanNotification(
+        current.notifications,
+        book,
+        user,
+        updatedLoan
+      );
+      const queueNotifications = nextWaitlist && !existingWaitlist
+        ? pushWaitlistEntryNotification(nextNotifications, book, user, nextWaitlist)
+        : nextNotifications;
 
       return {
         ...current,
         loans,
         users: syncUsersWithLoans(current.users, loans),
-        notifications: pushRejectedLoanNotification(
-          current.notifications,
-          book,
-          user,
-          updatedLoan
-        )
+        waitlists: nextWaitlist ? nextWaitlist.waitlists : current.waitlists,
+        notifications: queueNotifications
       };
     });
 
@@ -1467,11 +1506,7 @@ function assignBookToUser(userId, bookId) {
         return current;
       }
 
-      if (
-        !["AGUARDANDO_RETIRADA", "AGUARDANDO_CONFIRMACAO"].includes(
-          normalizeLoanStatus(target.status)
-        )
-      ) {
+      if (!isLoanApproved(target.status)) {
         result = {
           success: false,
           message: "Este livro ainda não está liberado para confirmação."
@@ -1483,7 +1518,7 @@ function assignBookToUser(userId, bookId) {
         (loan) =>
           loan.userId === target.userId &&
           loan.id !== target.id &&
-          normalizeLoanStatus(loan.status) === "EMPRESTADO"
+          isActiveLoanStatus(loan.status)
       );
 
       if (otherActiveLoan) {
@@ -1537,6 +1572,7 @@ function assignBookToUser(userId, bookId) {
 
       const updatedLoan = normalizeAdminLoan({
         ...target,
+        returnApprovedAt: new Date().toISOString(),
         returnedAt: new Date().toISOString(),
         status: "DEVOLVIDO"
       });
@@ -1579,7 +1615,12 @@ function assignBookToUser(userId, bookId) {
         books: promoted.books,
         users: nextUsers,
         waitlists: promoted.waitlists,
-        notifications: promoted.notifications
+        notifications: pushReturnApprovedNotification(
+          promoted.notifications,
+          book,
+          user,
+          updatedLoan
+        )
       };
     });
 
@@ -1619,7 +1660,7 @@ function assignBookToUser(userId, bookId) {
 
       const updatedLoan = normalizeAdminLoan({
         ...target,
-        status: "EMPRESTADO",
+        status: "DEVOLUCAO_SOLICITADA",
         returnRequestedAt: new Date().toISOString()
       });
       const loans = current.loans.map((loan) => (loan.id === loanId ? updatedLoan : loan));
@@ -1664,7 +1705,7 @@ function assignBookToUser(userId, bookId) {
         return current;
       }
 
-      if (normalizeLoanStatus(target.status) !== "EMPRESTADO") {
+      if (!isLoanReturnRequested(target.status)) {
         result = {
           success: false,
           message: "A devolução ainda não foi solicitada por este usuário."
@@ -1674,7 +1715,7 @@ function assignBookToUser(userId, bookId) {
 
       const updatedLoan = normalizeAdminLoan({
         ...target,
-        returnedAt: new Date().toISOString(),
+        returnApprovedAt: new Date().toISOString(),
         status: "DEVOLVIDO"
       });
       const loans = current.loans.map((loan) => (loan.id === loanId ? updatedLoan : loan));
@@ -1716,11 +1757,77 @@ function assignBookToUser(userId, bookId) {
         books: promoted.books,
         users: nextUsers,
         waitlists: promoted.waitlists,
-        notifications: pushReturnConfirmedNotification(
+        notifications: pushReturnApprovedNotification(
           promoted.notifications,
           book,
           user,
           updatedLoan
+        )
+      };
+    });
+
+    return result;
+  }
+
+  function rejectReturn(loanId, changes = {}) {
+    let result = {
+      success: false,
+      message: "Não foi possível recusar a devolução."
+    };
+
+    setState((current) => {
+      const target = current.loans.find((loan) => loan.id === loanId);
+      const book = current.books.find((item) => item.id === target?.bookId);
+      const user = current.users.find((item) => item.id === target?.userId);
+
+      if (!target || !book || !user) {
+        result = {
+          success: false,
+          message: "Empréstimo não encontrado."
+        };
+        return current;
+      }
+
+      if (!isLoanReturnRequested(target.status)) {
+        result = {
+          success: false,
+          message: "Somente devoluções solicitadas podem ser recusadas."
+        };
+        return current;
+      }
+
+      const reason = String(changes.reason ?? "").trim();
+      if (!reason) {
+        result = {
+          success: false,
+          message: "Informe um motivo para recusar a devolução."
+        };
+        return current;
+      }
+
+      const updatedLoan = normalizeAdminLoan({
+        ...target,
+        status: "EMPRESTADO",
+        returnRejectedAt: new Date().toISOString(),
+        returnApprovedAt: "",
+        notes: reason
+      });
+      const loans = current.loans.map((loan) => (loan.id === loanId ? updatedLoan : loan));
+      result = {
+        success: true,
+        message: "Devolução recusada. O livro permanece com o usuário."
+      };
+
+      return {
+        ...current,
+        loans,
+        users: syncUsersWithLoans(current.users, loans),
+        notifications: pushReturnRejectedNotification(
+          current.notifications,
+          book,
+          user,
+          updatedLoan,
+          reason
         )
       };
     });
@@ -1769,7 +1876,8 @@ function assignBookToUser(userId, bookId) {
       confirmPickup,
       markReturned,
       requestReturn,
-      confirmReturn
+      confirmReturn,
+      rejectReturn
     }
   };
 }
@@ -2033,6 +2141,11 @@ function normalizeAdminLoan(loan) {
     rejectedAt: loan.rejectedAt ?? "",
     borrowedAt: loan.borrowedAt ?? "",
     returnedAt: loan.returnedAt ?? "",
+    returnRequestedAt: loan.returnRequestedAt ?? "",
+    returnApprovedAt: loan.returnApprovedAt ?? "",
+    returnRejectedAt: loan.returnRejectedAt ?? "",
+    rejectionReason: loan.rejectionReason ?? "",
+    rejectionAddsToWaitlist: Boolean(loan.rejectionAddsToWaitlist),
     notes: loan.notes ?? ""
   };
 }
@@ -2041,9 +2154,10 @@ function isActiveLoanStatus(status) {
   const normalized = normalizeLoanStatus(status);
   return (
     normalized === "PENDENTE_APROVACAO" ||
-    normalized === "AGUARDANDO_RETIRADA" ||
-    normalized === "AGUARDANDO_CONFIRMACAO" ||
-    normalized === "EMPRESTADO"
+    normalized === "APROVADO" ||
+    normalized === "EMPRESTADO" ||
+    normalized === "DEVOLUCAO_SOLICITADA" ||
+    normalized === "DEVOLUCAO_APROVADA"
   );
 }
 
@@ -2079,7 +2193,7 @@ function pushLoanNotification(notifications, book, user, loan, title) {
       book,
       user,
       title,
-      ["AGUARDANDO_RETIRADA", "AGUARDANDO_CONFIRMACAO"].includes(normalizeLoanStatus(loan.status))
+      normalizeLoanStatus(loan.status) === "APROVADO"
         ? `O livro "${book.title}" está disponível para retirada.`
         : `O livro "${book.title}" foi liberado para leitura.`
     )
@@ -2096,7 +2210,7 @@ function pushLoanApprovalNotification(notifications, book, user, loan) {
       bookId: book.id,
       type: "loan-approval",
       title: "Solicitação aprovada",
-      message: `Sua solicitação para "${book.title}" foi aprovada. Procure a biblioteca para retirada.`,
+      message: `Sua solicitação para "${book.title}" foi aprovada. O livro já está reservado para retirada.`,
       actionLabel: "Ver livro",
       actionTarget: "/livros",
       createdAt: new Date().toISOString(),
@@ -2116,15 +2230,18 @@ function pushRejectedLoanNotification(notifications, book, user, loan) {
       id: `notification-${loan.id}`,
       userId: user.id,
       bookId: book.id,
-      type: "loan",
+      type: "loan-rejected",
       title: "Solicitação negada",
-      message: `Sua solicitação para "${book.title}" foi negada. Fale com o responsável pelas liberações.`,
+      message: loan.rejectionReason
+        ? `Sua solicitação para "${book.title}" foi recusada. Motivo: ${loan.rejectionReason}`
+        : `Sua solicitação para "${book.title}" foi recusada.`,
       actionLabel: "Ver minha conta",
       actionTarget: "/minha-conta",
       createdAt: new Date().toISOString(),
       metadata: {
         loanId: loan.id,
-        decision: "rejected"
+        decision: "rejected",
+        addedToWaitlist: Boolean(loan.rejectionAddsToWaitlist)
       }
     })
   );
@@ -2146,7 +2263,7 @@ function pushNotificationsForAdminApproval(notifications, users, book, user, loa
       id: `notification-${loan.id}`,
       userId: user.id,
       bookId: book.id,
-      type: "loan",
+      type: "loan-request",
       title: "Solicitação enviada",
       message: `Sua solicitação para "${book.title}" foi enviada para aprovação.`,
       actionLabel: "Ver livro",
@@ -2162,11 +2279,11 @@ function pushNotificationsForAdminApproval(notifications, users, book, user, loa
   for (const admin of adminUsers) {
     filtered.unshift(
       normalizeNotification({
-        id: `notification-${loan.id}-${admin.id}`,
-        userId: admin.id,
-        bookId: book.id,
-        type: "loan-approval",
-        title: "Nova solicitação de empréstimo",
+      id: `notification-${loan.id}-${admin.id}`,
+      userId: admin.id,
+      bookId: book.id,
+      type: "loan-approval",
+      title: "Nova solicitação de empréstimo",
         message: `${user.name} solicitou "${book.title}".`,
         actionLabel: "Abrir solicitacoes",
         actionTarget: "/admin/requests",
@@ -2180,6 +2297,128 @@ function pushNotificationsForAdminApproval(notifications, users, book, user, loa
   }
 
   return filtered;
+}
+
+function pushWaitlistEntryNotification(notifications, book, user, waitlist) {
+  const next = Array.isArray(notifications) ? notifications.slice() : [];
+  const filtered = next.filter((entry) => entry.id !== `notification-${waitlist.entry?.id ?? waitlist.id}`);
+
+  filtered.unshift(
+    normalizeNotification({
+      id: `notification-${waitlist.entry?.id ?? waitlist.id}`,
+      userId: user.id,
+      bookId: book.id,
+      type: "waitlist",
+      title: "Você entrou na fila",
+      message: `Você foi adicionado à fila de espera de "${book.title}" na posição ${waitlist.position}.`,
+      actionLabel: "Ver fila",
+      actionTarget: "/minha-conta",
+      createdAt: new Date().toISOString(),
+      metadata: {
+        waitlistId: waitlist.entry?.id ?? waitlist.id,
+        position: waitlist.position
+      }
+    })
+  );
+
+  return filtered;
+}
+
+function pushReturnRequestNotifications(notifications, users, book, user, loan) {
+  const adminUsers = users.filter((item) => item.role === "admin" && item.accessStatus !== "blocked");
+  const next = Array.isArray(notifications) ? notifications.slice() : [];
+  const filtered = next.filter(
+    (entry) =>
+      entry.id !== `notification-${loan.id}-return` &&
+      !adminUsers.some((admin) => entry.id === `notification-${loan.id}-return-${admin.id}`)
+  );
+
+  filtered.unshift(
+    normalizeNotification({
+      id: `notification-${loan.id}-return`,
+      userId: user.id,
+      bookId: book.id,
+      type: "return-request",
+      title: "Solicitação de devolução enviada",
+      message: `Sua solicitação de devolução para "${book.title}" foi enviada aos administradores.`,
+      actionLabel: "Ver livro",
+      actionTarget: "/livros",
+      createdAt: new Date().toISOString(),
+      metadata: {
+        loanId: loan.id,
+        requesterId: user.id
+      }
+    })
+  );
+
+  for (const admin of adminUsers) {
+    filtered.unshift(
+      normalizeNotification({
+        id: `notification-${loan.id}-return-${admin.id}`,
+        userId: admin.id,
+        bookId: book.id,
+        type: "return-request",
+        title: "Devolução solicitada",
+        message: `${user.name} solicitou a devolução de "${book.title}".`,
+        actionLabel: "Abrir solicitações",
+        actionTarget: "/admin/requests",
+        createdAt: new Date().toISOString(),
+        metadata: {
+          loanId: loan.id,
+          requesterId: user.id
+        }
+      })
+    );
+  }
+
+  return filtered;
+}
+
+function pushReturnApprovedNotification(notifications, book, user, loan) {
+  const next = notifications.filter((entry) => entry.id !== `notification-${loan.id}-return`);
+  next.unshift(
+    normalizeNotification({
+      id: `notification-${loan.id}-return`,
+      userId: user.id,
+      bookId: book.id,
+      type: "return-approved",
+      title: "Devolução aprovada",
+      message: `A devolução de "${book.title}" foi aprovada e registrada.`,
+      actionLabel: "Ver minha conta",
+      actionTarget: "/minha-conta",
+      createdAt: new Date().toISOString(),
+      metadata: {
+        loanId: loan.id,
+        decision: "approved"
+      }
+    })
+  );
+  return next;
+}
+
+function pushReturnRejectedNotification(notifications, book, user, loan, reason) {
+  const next = notifications.filter((entry) => entry.id !== `notification-${loan.id}-return`);
+  next.unshift(
+    normalizeNotification({
+      id: `notification-${loan.id}-return`,
+      userId: user.id,
+      bookId: book.id,
+      type: "return-rejected",
+      title: "Devolução recusada",
+      message: reason
+        ? `A devolução de "${book.title}" foi recusada. Motivo: ${reason}`
+        : `A devolução de "${book.title}" foi recusada.`,
+      actionLabel: "Ver minha conta",
+      actionTarget: "/minha-conta",
+      createdAt: new Date().toISOString(),
+      metadata: {
+        loanId: loan.id,
+        decision: "rejected",
+        reason: reason ?? ""
+      }
+    })
+  );
+  return next;
 }
 
 function markLoanNotificationAsRead(notifications, loan, user) {
@@ -2213,23 +2452,18 @@ function upsertReadingListForUser(users, userId, bookId) {
 }
 
 function createWaitlistEntry({ waitlists, bookId, userId }) {
-  const position = getWaitlistPosition(waitlists, bookId, userId);
+  const existing = waitlists.find(
+    (entry) =>
+      entry.bookId === bookId &&
+      entry.userId === userId &&
+      normalizeWaitlistStatus(entry.status) === "AGUARDANDO_FILA"
+  );
 
-  if (position) {
-    const existing = waitlists.find(
-      (entry) =>
-        entry.bookId === bookId &&
-        entry.userId === userId &&
-        normalizeWaitlistStatus(entry.status) === "AGUARDANDO_FILA"
-    );
-
+  if (existing) {
     return {
-      entry: existing ?? normalizeWaitlistEntry({
-        bookId,
-        userId
-      }),
+      entry: existing,
       waitlists,
-      position
+      position: getWaitlistPosition(waitlists, bookId, userId)
     };
   }
 
@@ -2298,11 +2532,12 @@ function promoteWaitlistAfterReturn({ state, bookId }) {
       requesterId: user.id,
       requestedAt: now,
       type: "physical",
-      status: "AGUARDANDO_CONFIRMACAO",
+      status: "APROVADO",
       responsible: "",
       location: "",
       dueAt: reservationUntil,
       readyUntil: reservationUntil,
+      approvedAt: now,
       borrowedAt: "",
       returnedAt: "",
       notes: ""
@@ -2341,9 +2576,7 @@ function expireReservations(state) {
 
   for (const loan of loans) {
     if (
-      !["AGUARDANDO_RETIRADA", "AGUARDANDO_CONFIRMACAO"].includes(
-        normalizeLoanStatus(loan.status)
-      ) ||
+      !isLoanApproved(loan.status) ||
       !loan.readyUntil
     ) {
       continue;

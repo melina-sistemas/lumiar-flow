@@ -2835,6 +2835,31 @@ textarea {
   gap: 12px;
 }
 
+.admin-checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(6, 147, 227, 0.05);
+  border: 1px solid rgba(6, 147, 227, 0.12);
+}
+
+.admin-checkbox-field input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.admin-cell-stack {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-cell-stack small {
+  color: var(--muted);
+}
+
 .admin-button-danger {
   background: #dc2626;
 }
@@ -4113,6 +4138,49 @@ textarea {
   gap: 16px;
 }
 
+.account-history-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 22px;
+  background: rgba(15, 23, 42, 0.04);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.account-history-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.account-history-card-header strong {
+  display: block;
+  font-size: 1rem;
+}
+
+.account-history-card-header p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.account-history-list.compact {
+  gap: 10px;
+}
+
+.account-history-empty {
+  min-height: 66px;
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+}
+
+.account-note-danger {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
 .account-settings-stack {
   display: grid;
   gap: 18px;
@@ -4464,6 +4532,36 @@ textarea {
   color: var(--primary-dark);
 }
 
+.book-availability-pill.pickup,
+.modal-status-pill.pickup {
+  background: rgba(6, 147, 227, 0.12);
+  color: var(--primary-dark);
+}
+
+.book-availability-pill.pending,
+.modal-status-pill.pending {
+  background: rgba(123, 135, 145, 0.12);
+  color: var(--muted);
+}
+
+.book-availability-pill.borrowed,
+.modal-status-pill.borrowed {
+  background: rgba(16, 25, 35, 0.78);
+  color: #ffffff;
+}
+
+.book-availability-pill.read,
+.modal-status-pill.read {
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
+}
+
+.book-availability-pill.rejected,
+.modal-status-pill.rejected {
+  background: rgba(220, 38, 38, 0.12);
+  color: #b91c1c;
+}
+
 .book-rating {
   color: var(--primary);
   font-size: 0.82rem;
@@ -4729,8 +4827,12 @@ textarea {
 
 .book-modal-notes textarea {
   width: 100%;
-  min-height: 122px;
+  min-height: 160px;
   resize: vertical;
+}
+
+.book-modal-notes {
+  grid-column: 1 / -1;
 }
 
 .modal-borrow-panel.muted {
@@ -4844,6 +4946,35 @@ body[data-brand-theme="dark"] .book-modal-summary strong,
 body[data-brand-theme="dark"] .modal-borrow-panel strong,
 body[data-brand-theme="dark"] .premium-access-note strong {
   color: var(--text);
+}
+
+body[data-brand-theme="dark"] .book-modal-notes span {
+  color: var(--text);
+}
+
+body[data-brand-theme="dark"] .book-modal-notes small {
+  color: var(--text-soft);
+}
+
+body[data-brand-theme="dark"] .book-modal-notes textarea {
+  background: rgba(15, 23, 42, 0.82);
+  border-color: rgba(148, 163, 184, 0.18);
+  color: var(--text);
+}
+
+body[data-brand-theme="dark"] .admin-checkbox-field {
+  background: rgba(15, 23, 42, 0.72);
+  border-color: rgba(148, 163, 184, 0.16);
+}
+
+body[data-brand-theme="dark"] .account-history-card {
+  background: rgba(15, 23, 42, 0.68);
+  border-color: rgba(148, 163, 184, 0.16);
+}
+
+body[data-brand-theme="dark"] .account-history-card-header p,
+body[data-brand-theme="dark"] .account-history-empty {
+  color: var(--text-soft);
 }
 
 .reader-modal-backdrop {

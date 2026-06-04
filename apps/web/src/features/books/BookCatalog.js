@@ -6,8 +6,10 @@ import {
   getLoanStatusLabel,
   getWaitlistEntry,
   getWaitlistPosition,
+  isLoanApproved,
   isLoanBorrowed,
   isLoanPendingApproval,
+  isLoanReturnRequested,
   normalizeLoanStatus
 } from "./loan-status.js";
 
@@ -147,12 +149,10 @@ export function BookCatalog({
         const hasActiveBorrowedLoan = currentReaderLoans.some(
           (loan) =>
             loan.type !== "digital" &&
-            ["EMPRESTADO", "AGUARDANDO_RETIRADA", "AGUARDANDO_CONFIRMACAO"].includes(
+            ["EMPRESTADO", "APROVADO", "DEVOLUCAO_SOLICITADA", "DEVOLUCAO_APROVADA"].includes(
               normalizeLoanStatus(loan.status)
             )
         );
-        const canRequestPhysicalLoan =
-          currentReader?.accessStatus === "approved" && !hasActiveBorrowedLoan;
         const currentReaderQueuePosition = currentReaderWaitlist
           ? getWaitlistPosition(waitlists, book.id, borrowerId)
           : 0;
@@ -199,17 +199,12 @@ export function BookCatalog({
           isOutOfStock,
           isUnavailable,
           hasActiveBorrowedLoan,
-          canRequestPhysicalLoan,
           currentReaderQueuePosition,
           statusLabel,
-          statusKey: !book.isActive ? "indisponivel" : String(currentBookStatus || "").toLowerCase(),
+          statusKey: !book.isActive ? "indisponivel" : getBookStatusKey(currentBookStatus),
           requestLabel,
         returnText: buildReturnCountdown(
-          ["AGUARDANDO_RETIRADA", "AGUARDANDO_CONFIRMACAO"].includes(
-            normalizeLoanStatus(nextLoan?.status)
-          )
-            ? nextLoan.readyUntil || nextLoan.dueAt
-            : nextLoan?.dueAt,
+          isLoanApproved(nextLoan?.status) ? nextLoan.readyUntil || nextLoan.dueAt : nextLoan?.dueAt,
           now
         ),
           summary: String(book.summary ?? "").trim() || buildSummary(book)
@@ -231,7 +226,13 @@ export function BookCatalog({
     modalBook?.type === "digital" ? true : isGoldLevel(currentReader?.level);
   const canRequestPhysicalLoan =
     currentReader?.accessStatus === "approved" &&
-    !currentReaderLoans.some((loan) => loan.type !== "digital" && isLoanBorrowed(loan.status));
+    !currentReaderLoans.some(
+      (loan) =>
+        loan.type !== "digital" &&
+        ["EMPRESTADO", "APROVADO", "DEVOLUCAO_SOLICITADA", "DEVOLUCAO_APROVADA"].includes(
+          normalizeLoanStatus(loan.status)
+        )
+    );
   const isPendingReader = currentReader?.accessStatus === "pending";
 
   useEffect(() => {
@@ -689,9 +690,7 @@ export function BookCatalog({
     const targetLoan = currentReaderLoans.find(
       (loan) =>
         loan.bookId === book.id &&
-        ["AGUARDANDO_RETIRADA", "AGUARDANDO_CONFIRMACAO"].includes(
-          normalizeLoanStatus(loan.status)
-        )
+        isLoanApproved(loan.status)
     );
 
     if (!targetLoan) {
@@ -1031,22 +1030,22 @@ export function BookCatalog({
                             </button>
                           </div>
                         `
-                      : modalBook.type === "physical" && !canRequestPhysicalLoan
+                      : modalBook.type === "physical" && currentReader?.accessStatus !== "approved"
                       ? html`
                           <div className="modal-borrow-panel muted">
-                            <strong>Cadastro em aprovação</strong>
+                            <strong>
+                              ${isPendingReader ? "Cadastro em aprovação" : "Acesso físico indisponível"}
+                            </strong>
                             <span>
-                              Seu cadastro ainda está em aprovação. Você pode ver os livros e acessar
-                              leituras digitais permitidas, mas o empréstimo físico só fica disponível
-                              após a validação do administrador.
+                              ${isPendingReader
+                                ? "Seu cadastro ainda está em aprovação. Você pode ver os livros e acessar leituras digitais permitidas, mas o empréstimo físico só fica disponível após a validação do administrador."
+                                : "Seu acesso não permite solicitações físicas neste momento. Verifique sua conta com o administrador."}
                             </span>
                           </div>
                         `
                       : modalBook.type === "physical" &&
                         modalBook.currentReaderLoan &&
-                        ["AGUARDANDO_RETIRADA", "AGUARDANDO_CONFIRMACAO"].includes(
-                          normalizeLoanStatus(modalBook.currentReaderLoan.status)
-                        )
+                        isLoanApproved(modalBook.currentReaderLoan.status)
                       ? html`
                           <div className="modal-borrow-panel">
                             <strong>Solicitação de empréstimo</strong>
@@ -1076,9 +1075,12 @@ export function BookCatalog({
                       ? html`
                           <div className="modal-borrow-panel">
                             <strong>Solicitação de empréstimo</strong>
-                            <span>
-                              ${modalBook.currentReaderWaitlist
-                                ? `Você entrou na fila de espera na posição #${modalBook.currentReaderQueuePosition}. Seu lugar já está reservado nesta fila. Você pode aguardar a liberação ou sair da fila a qualquer momento.`
+                              <span>
+                                ${modalBook.currentReaderWaitlist
+                                  ? `Você entrou na fila de espera na posição #${modalBook.currentReaderQueuePosition}. Seu lugar já está reservado nesta fila. Você pode aguardar a liberação ou sair da fila a qualquer momento.`
+                                : modalBook.currentReaderLoan &&
+                                    isLoanReturnRequested(modalBook.currentReaderLoan.status)
+                                ? "Sua devolução já foi solicitada e está em análise. Aguarde a confirmação do administrador."
                                 : modalBook.hasActiveBorrowedLoan
                                 ? "Você já possui um livro emprestado. Para seguir com outro livro físico, é preciso devolver o atual. Se preferir, você pode entrar na fila de espera deste título."
                                 : "Este livro está em circulação. Quando este exemplar voltar ao acervo, você pode continuar pela fila de espera."}
@@ -1147,7 +1149,7 @@ export function BookCatalog({
                                 ou informação útil para o administrador.
                               </small>
                               <textarea
-                                rows="5"
+                                rows="6"
                                 value=${loanNotes}
                                 onInput=${(event) => setLoanNotes(event.target.value)}
                                 placeholder="Ex.: vou retirar no balcão no fim do expediente."
@@ -1440,11 +1442,14 @@ function translateLoanStatus(status) {
   switch (normalizeLoanStatus(status)) {
     case "PENDENTE_APROVACAO":
       return "Aguardando aprovação";
-    case "AGUARDANDO_RETIRADA":
-    case "AGUARDANDO_CONFIRMACAO":
+    case "APROVADO":
       return "Pronto para retirada";
     case "EMPRESTADO":
       return "Emprestado";
+    case "DEVOLUCAO_SOLICITADA":
+      return "Devolução solicitada";
+    case "DEVOLUCAO_APROVADA":
+      return "Devolução aprovada";
     case "DEVOLVIDO":
       return "Devolvido";
     case "RECUSADO":
@@ -1460,19 +1465,46 @@ function buildLoanStatusMessage(loan, book) {
   switch (normalizeLoanStatus(loan.status)) {
     case "PENDENTE_APROVACAO":
       return "Solicitação enviada ao admin.";
-    case "AGUARDANDO_RETIRADA":
-    case "AGUARDANDO_CONFIRMACAO":
+    case "APROVADO":
       return `Reserve até ${formatLoanDate(loan.readyUntil || loan.dueAt)} e retire em ${loan.location || "local a definir"} com ${loan.responsible || "responsável a definir"}.`;
     case "EMPRESTADO":
       return book.type === "digital"
         ? `Acesso liberado até ${formatLoanDate(loan.dueAt)}.`
         : `Com você até ${formatLoanDate(loan.dueAt)}.`;
+    case "DEVOLUCAO_SOLICITADA":
+      return "Sua devolução foi solicitada e está aguardando análise.";
+    case "DEVOLUCAO_APROVADA":
+      return "Devolução aprovada. O fluxo está sendo finalizado.";
     case "RECUSADO":
-      return "Solicitação negada. Fale com o responsável pelas liberações.";
+      return loan.rejectionReason
+        ? `Solicitação negada. Motivo: ${loan.rejectionReason}.`
+        : "Solicitação negada. Fale com o responsável pelas liberações.";
     case "CANCELADO":
       return "Solicitação cancelada.";
     default:
       return "Status atualizado.";
+  }
+}
+
+function getBookStatusKey(status) {
+  switch (normalizeLoanStatus(status)) {
+    case "APROVADO":
+      return "pickup";
+    case "PENDENTE_APROVACAO":
+    case "DEVOLUCAO_SOLICITADA":
+    case "DEVOLUCAO_APROVADA":
+      return "pending";
+    case "EMPRESTADO":
+      return "borrowed";
+    case "DEVOLVIDO":
+      return "read";
+    case "RECUSADO":
+    case "CANCELADO":
+      return "rejected";
+    case "AGUARDANDO_FILA":
+      return "pending";
+    default:
+      return "available";
   }
 }
 

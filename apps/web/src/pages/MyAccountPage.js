@@ -7,9 +7,12 @@ import { createPlaceholderCover, resolveBookCoverSource } from "../services/goog
 import {
   getLoanStatusLabel,
   getWaitlistPosition,
+  isLoanApproved,
   isLoanActive,
   isLoanBorrowed,
   isLoanPendingApproval,
+  isLoanReturnRequested,
+  isLoanReturnApproved,
   isLoanReturned,
   normalizeLoanStatus
 } from "../features/books/loan-status.js";
@@ -42,15 +45,27 @@ export function MyAccountPage({ currentUser, books, loans, waitlists = [], notif
 
   const readLoans = userLoans.filter((loan) => isLoanReturned(loan.status));
   const activeLoans = userLoans.filter((loan) => isLoanActive(loan.status));
+  const pendingLoans = userLoans.filter((loan) => isLoanPendingApproval(loan.status));
+  const approvedLoans = userLoans.filter((loan) => isLoanApproved(loan.status));
+  const rejectedLoans = userLoans.filter((loan) => normalizeLoanStatus(loan.status) === "RECUSADO");
+  const finishedLoans = userLoans.filter(
+    (loan) => isLoanReturned(loan.status) || normalizeLoanStatus(loan.status) === "CANCELADO"
+  );
+  const inProgressLoans = userLoans.filter(
+    (loan) =>
+      isLoanBorrowed(loan.status) ||
+      isLoanReturnRequested(loan.status) ||
+      isLoanReturnApproved(loan.status)
+  );
   const averageDays = calculateAverageDays(readLoans);
   const currentLoan =
     userLoans.find(
       (loan) =>
         isLoanBorrowed(loan.status) ||
+        isLoanApproved(loan.status) ||
         isLoanPendingApproval(loan.status) ||
-        ["AGUARDANDO_RETIRADA", "AGUARDANDO_CONFIRMACAO"].includes(
-          normalizeLoanStatus(loan.status)
-        )
+        isLoanReturnRequested(loan.status) ||
+        isLoanReturnApproved(loan.status)
     ) ?? null;
   const currentBook = currentLoan
     ? books.find((book) => book.id === currentLoan.bookId) ?? null
@@ -75,6 +90,38 @@ export function MyAccountPage({ currentUser, books, loans, waitlists = [], notif
   ];
 
   const profileCompletion = calculateProfileCompletion(profileForm);
+  const historySections = [
+    {
+      key: "pending",
+      title: "Pendentes",
+      description: "Solicitações aguardando análise do administrador.",
+      loans: pendingLoans
+    },
+    {
+      key: "approved",
+      title: "Aprovadas",
+      description: "Pedidos liberados para retirada.",
+      loans: approvedLoans
+    },
+    {
+      key: "rejected",
+      title: "Recusadas",
+      description: "Solicitações negadas com o motivo registrado.",
+      loans: rejectedLoans
+    },
+    {
+      key: "active",
+      title: "Em andamento",
+      description: "Livros emprestados ou com devolução em análise.",
+      loans: inProgressLoans
+    },
+    {
+      key: "finished",
+      title: "Finalizadas",
+      description: "Leituras concluídas, devolvidas ou canceladas.",
+      loans: finishedLoans
+    }
+  ];
 
   return html`
     <${PageLayout}
@@ -341,8 +388,23 @@ export function MyAccountPage({ currentUser, books, loans, waitlists = [], notif
                         <small>
                           ${isLoanPendingApproval(currentLoan.status)
                             ? `Solicitado em ${formatDate(currentLoan.requestedAt)}`
-                            : `Retirada em ${formatDate(currentLoan.borrowedAt || currentLoan.requestedAt)} · Devolução prevista ${formatDate(currentLoan.dueAt)}`}
+                            : isLoanApproved(currentLoan.status)
+                              ? `Aprovado em ${formatDate(currentLoan.approvedAt || currentLoan.requestedAt)} · Aguarde a retirada`
+                              : isLoanReturnRequested(currentLoan.status)
+                                ? `Devolução solicitada em ${formatDate(currentLoan.returnRequestedAt)}`
+                                : isLoanReturnApproved(currentLoan.status)
+                                  ? `Devolução aprovada em ${formatDate(currentLoan.returnApprovedAt)}`
+                                  : `Retirada em ${formatDate(currentLoan.borrowedAt || currentLoan.requestedAt)} · Devolução prevista ${formatDate(currentLoan.dueAt)}`}
                         </small>
+                        ${normalizeLoanStatus(currentLoan.status) === "RECUSADO"
+                          ? html`
+                              <small className="account-note-danger">
+                                ${currentLoan.rejectionReason
+                                  ? `Motivo da recusa: ${currentLoan.rejectionReason}`
+                                  : "Sua solicitação foi recusada."}
+                              </small>
+                            `
+                          : null}
                       </div>
                     </div>
 
@@ -352,22 +414,51 @@ export function MyAccountPage({ currentUser, books, loans, waitlists = [], notif
                     </div>
 
                     <div className="account-form-actions between">
+                      ${isLoanApproved(currentLoan.status) && currentLoan.type !== "digital"
+                        ? html`
+                            <button
+                              type="button"
+                              className="admin-primary"
+                              onClick=${() => {
+                                const result = actions.confirmPickup(currentLoan.id);
+                                setFeedback({
+                                  tone: result.success ? "success" : "error",
+                                  title: result.success
+                                    ? "Retirada confirmada"
+                                    : "Não foi possível confirmar",
+                                  message: result.message
+                                });
+                              }}
+                            >
+                              Confirmar retirada
+                            </button>
+                          `
+                        : null}
+
                       ${isLoanBorrowed(currentLoan.status) && currentLoan.type !== "digital"
                         ? html`
                             <button
                               type="button"
                               className="admin-primary"
                               onClick=${() => {
-                                const result = actions.markReturned(currentLoan.id);
+                                const result = actions.requestReturn(currentLoan.id);
                                 setFeedback({
                                   tone: result.success ? "success" : "error",
-                                  title: result.success ? "Devolução registrada" : "Não foi possível devolver",
+                                  title: result.success
+                                    ? "Devolução solicitada"
+                                    : "Não foi possível solicitar a devolução",
                                   message: result.message
                                 });
                               }}
                             >
                               Devolver
                             </button>
+                          `
+                        : null}
+
+                      ${isLoanReturnRequested(currentLoan.status)
+                        ? html`
+                            <span className="account-soft-pill">Devolução aguardando análise</span>
                           `
                         : null}
                     </div>
@@ -439,40 +530,67 @@ export function MyAccountPage({ currentUser, books, loans, waitlists = [], notif
               </div>
             </div>
 
-            ${readLoans.length > 0
-              ? html`
-                  <div className="account-history-list">
-                    ${readLoans
-                      .slice()
-                      .sort((left, right) =>
-                        new Date(right.returnedAt || right.borrowedAt || 0).getTime() -
-                        new Date(left.returnedAt || left.borrowedAt || 0).getTime()
-                      )
-                      .map((loan) => {
-                        const book = books.find((item) => item.id === loan.bookId);
-                        return html`
-                          <article key=${loan.id} className="account-waitlist-card">
-                            <div>
-                              <strong>${book?.title || "Livro"}</strong>
-                              <p>${book?.author || "Biblioteca interna"}</p>
-                              <small>
-                                Retirada: ${formatDate(loan.borrowedAt || loan.requestedAt)} · Devolução: ${formatDate(loan.returnedAt)}
-                              </small>
-                            </div>
-                            <span className="account-soft-pill">
-                              ${calculateReadingTimeLabel(loan.borrowedAt, loan.returnedAt)}
-                            </span>
-                          </article>
-                        `;
-                      })}
-                  </div>
-                `
-              : html`
-                  <article className="account-reading-card account-empty-card">
-                    <strong>Nenhum livro lido ainda</strong>
-                    <span>Seu histórico vai aparecer aqui depois da primeira devolução ou leitura concluída.</span>
+            <div className="account-history-grid">
+              ${historySections.map(
+                (section) => html`
+                  <article key=${section.key} className="account-history-card">
+                    <div className="account-history-card-header">
+                      <div>
+                        <strong>${section.title}</strong>
+                        <p>${section.description}</p>
+                      </div>
+                      <span className="account-soft-pill">${section.loans.length}</span>
+                    </div>
+
+                    ${section.loans.length > 0
+                      ? html`
+                          <div className="account-history-list compact">
+                            ${section.loans
+                              .slice()
+                              .sort((left, right) =>
+                                new Date(
+                                  right.returnedAt ||
+                                    right.returnApprovedAt ||
+                                    right.borrowedAt ||
+                                    right.requestedAt ||
+                                    0
+                                ).getTime() -
+                                new Date(
+                                  left.returnedAt ||
+                                    left.returnApprovedAt ||
+                                    left.borrowedAt ||
+                                    left.requestedAt ||
+                                    0
+                                ).getTime()
+                              )
+                              .map((loan) => {
+                                const book = books.find((item) => item.id === loan.bookId);
+                                return html`
+                                  <article key=${loan.id} className="account-waitlist-card">
+                                    <div>
+                                      <strong>${book?.title || "Livro"}</strong>
+                                      <p>${book?.author || "Biblioteca interna"}</p>
+                                      <small>
+                                        ${historyLoanSubtitle(loan)}
+                                      </small>
+                                    </div>
+                                    <span className="account-soft-pill">
+                                      ${getLoanStatusLabel(loan.status)}
+                                    </span>
+                                  </article>
+                                `;
+                              })}
+                          </div>
+                        `
+                      : html`
+                          <div className="account-history-empty">
+                            <span>Nenhum item nesta categoria.</span>
+                          </div>
+                        `}
                   </article>
-                `}
+                `
+              )}
+            </div>
           </div>
 
           <div className="account-hub-block">
@@ -585,12 +703,16 @@ function getLoanStatusTone(status) {
     return "borrowed";
   }
 
+  if (isLoanApproved(status)) {
+    return "pending";
+  }
+
   if (isLoanPendingApproval(status)) {
     return "pending";
   }
 
-  if (["AGUARDANDO_RETIRADA", "AGUARDANDO_CONFIRMACAO"].includes(normalizeLoanStatus(status))) {
-    return "pending";
+  if (isLoanReturnRequested(status) || isLoanReturnApproved(status)) {
+    return "borrowed";
   }
 
   if (isLoanReturned(status)) {
@@ -629,6 +751,31 @@ function calculateReadingTimeLabel(borrowedAt, returnedAt) {
   );
 
   return `${diffDays} dia${diffDays === 1 ? "" : "s"}`;
+}
+
+function historyLoanSubtitle(loan) {
+  switch (normalizeLoanStatus(loan.status)) {
+    case "PENDENTE_APROVACAO":
+      return `Solicitado em ${formatDate(loan.requestedAt)}`;
+    case "APROVADO":
+      return `Aprovado em ${formatDate(loan.approvedAt || loan.requestedAt)} · Retirada prevista ${formatDate(loan.dueAt)}`;
+    case "EMPRESTADO":
+      return `Retirada em ${formatDate(loan.borrowedAt || loan.requestedAt)} · Devolução prevista ${formatDate(loan.dueAt)}`;
+    case "DEVOLUCAO_SOLICITADA":
+      return `Devolução solicitada em ${formatDate(loan.returnRequestedAt)}`;
+    case "DEVOLUCAO_APROVADA":
+      return `Devolução aprovada em ${formatDate(loan.returnApprovedAt)}`;
+    case "RECUSADO":
+      return loan.rejectionReason
+        ? `Recusado em ${formatDate(loan.rejectedAt)} · Motivo: ${loan.rejectionReason}`
+        : `Recusado em ${formatDate(loan.rejectedAt)}`;
+    case "CANCELADO":
+      return `Cancelado em ${formatDate(
+        loan.updatedAt || loan.returnedAt || loan.readyUntil || loan.dueAt || loan.requestedAt
+      )}`;
+    default:
+      return `Atualizado em ${formatDate(loan.updatedAt || loan.borrowedAt || loan.requestedAt)}`;
+  }
 }
 
 function translateAccessStatus(status) {

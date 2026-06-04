@@ -954,8 +954,7 @@ function translateLoanStatus(status) {
   switch (normalizeLoanStatus(status)) {
     case "PENDENTE_APROVACAO":
       return "Em análise";
-    case "AGUARDANDO_RETIRADA":
-    case "AGUARDANDO_CONFIRMACAO":
+    case "APROVADO":
       return "Pronto para retirada";
     case "EMPRESTADO":
       return "Emprestado";
@@ -985,11 +984,7 @@ function getRecommendedBookStatus({ book, history }) {
     return { label: "Emprestado", className: "pending" };
   }
 
-  if (
-    ["AGUARDANDO_RETIRADA", "AGUARDANDO_CONFIRMACAO"].includes(
-      normalizeLoanStatus(matchingHistory?.status)
-    )
-  ) {
+  if (normalizeLoanStatus(matchingHistory?.status) === "APROVADO") {
     return { label: "Pronto para retirada", className: "pending" };
   }
 
