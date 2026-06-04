@@ -56,6 +56,7 @@ export function normalizeLoanStatus(status) {
     case "RETURNED":
     case "DEVOLVIDO":
       return "DEVOLVIDO";
+    case "RECUSADO":
     case "REJECTED":
     case "REJEITADO":
       return "RECUSADO";

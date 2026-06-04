@@ -458,6 +458,7 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
         syncAnchorRef.current = result.adminStateUpdatedAt;
       }
       pendingSyncRef.current = null;
+      void refreshStateFromBackend();
     } catch {
       const latestUpdatedAt = await fetchLatestAdminStateAnchor();
 
@@ -474,6 +475,7 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
             syncAnchorRef.current = retryResult.adminStateUpdatedAt;
           }
           pendingSyncRef.current = null;
+          void refreshStateFromBackend();
           return;
         } catch {
           // Fall through and keep the latest snapshot queued locally.
