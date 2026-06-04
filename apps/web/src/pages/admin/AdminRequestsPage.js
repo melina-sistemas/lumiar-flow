@@ -6,7 +6,8 @@ import {
   isLoanApproved,
   isLoanBorrowed,
   isLoanPendingApproval,
-  isLoanReturnRequested
+  isLoanReturnRequested,
+  normalizeLoanStatus
 } from "../../features/books/loan-status.js";
 
 const html = htm.bind(React.createElement);
@@ -32,6 +33,11 @@ export function AdminRequestsPage({ loans, books, users, actions }) {
     [loans]
   );
 
+  const rejectedRequests = useMemo(
+    () => loans.filter((loan) => normalizeLoanStatus(loan.status) === "RECUSADO"),
+    [loans]
+  );
+
   const activeLoans = useMemo(
     () => loans.filter((loan) => isLoanBorrowed(loan.status) || isLoanApproved(loan.status)),
     [loans]
@@ -44,6 +50,11 @@ export function AdminRequestsPage({ loans, books, users, actions }) {
       dueAt: approval.dueAt ? new Date(approval.dueAt).toISOString() : ""
     });
 
+    setFeedback(result.message);
+  }
+
+  function handleArchive(loanId) {
+    const result = actions.archiveLoan(loanId);
     setFeedback(result.message);
   }
 
@@ -173,6 +184,65 @@ export function AdminRequestsPage({ loans, books, users, actions }) {
           onApprove: handleApprove,
           onReject: (loan) => openRejectModal(loan, "loan", getBookTitleFromLoan(loan, books))
         })}
+      </article>
+
+      <article className="admin-card admin-table-card">
+        <div className="admin-card-header">
+          <div>
+            <h3>Recusadas</h3>
+            <p className="admin-helper">Solicitações recusadas ficam registradas e podem ser arquivadas depois.</p>
+          </div>
+          <span className="admin-pill">${rejectedRequests.length} itens</span>
+        </div>
+
+        ${rejectedRequests.length === 0
+          ? html`
+              <div className="admin-empty">
+                <strong>Nenhuma solicitação recusada no momento.</strong>
+              </div>
+            `
+          : html`
+              <div className="admin-table-wrapper">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Usuário</th>
+                      <th>Livro</th>
+                      <th>Motivo</th>
+                      <th>Recusada em</th>
+                      <th>Status</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${rejectedRequests.map((loan) => {
+                      const user = users.find((item) => item.id === loan.userId);
+                      const book = books.find((item) => item.id === loan.bookId);
+                      return html`
+                        <tr key=${loan.id}>
+                          <td>${user?.name ?? "-"}</td>
+                          <td>${book?.title ?? "-"}</td>
+                          <td>${loan.rejectionReason || loan.notes || "-"}</td>
+                          <td>${formatDateTime(loan.rejectedAt || loan.requestedAt)}</td>
+                          <td>
+                            <span className="admin-badge status-rejected">Recusado</span>
+                          </td>
+                          <td className="admin-table-actions">
+                            <button
+                              type="button"
+                              className="admin-link"
+                              onClick=${() => handleArchive(loan.id)}
+                            >
+                              Arquivar
+                            </button>
+                          </td>
+                        </tr>
+                      `;
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            `}
       </article>
 
       <article className="admin-card admin-table-card">
@@ -332,7 +402,14 @@ export function AdminRequestsPage({ loans, books, users, actions }) {
       ${rejectionModal
         ? html`
             <div className="admin-modal-backdrop" onClick=${() => setRejectionModal(null)}>
-              <div className="admin-modal rejection-modal" onClick=${(event) => event.stopPropagation()}>
+              <form
+                className="admin-modal rejection-modal"
+                onSubmit=${(event) => {
+                  event.preventDefault();
+                  handleRejectSubmit();
+                }}
+                onClick=${(event) => event.stopPropagation()}
+              >
                 <div className="admin-modal-header">
                   <div>
                     <h3>${rejectionModal.title}</h3>
@@ -343,34 +420,42 @@ export function AdminRequestsPage({ loans, books, users, actions }) {
                   </button>
                 </div>
 
-                <label className="admin-form-field admin-form-span-2">
+                <label className="admin-form-field admin-form-span-2 rejection-modal-field">
                   <span>Motivo obrigatório</span>
                   <textarea
-                    rows="5"
+                    rows="6"
+                    className="rejection-modal-textarea"
                     value=${rejectionModal.reason}
                     onInput=${(event) =>
                       setRejectionModal((current) => ({
                         ...current,
                         reason: event.target.value
                       }))}
+                    required
+                    minLength="3"
                     placeholder="Descreva o motivo da recusa."
                   ></textarea>
+                  <small className="admin-field-note">
+                    O motivo será exibido para o usuário e registrado no histórico da solicitação.
+                  </small>
                 </label>
 
                 ${rejectionModal.kind === "loan"
                   ? html`
-                      <label className="admin-checkbox-field">
-                        <input
-                          type="checkbox"
-                          checked=${rejectionModal.addToWaitlist}
-                          onChange=${(event) =>
-                            setRejectionModal((current) => ({
-                              ...current,
-                              addToWaitlist: event.target.checked
-                            }))}
-                        />
-                        <span>Recusar e adicionar à fila de espera</span>
-                      </label>
+                      <div className="admin-modal-panel rejection-modal-queue">
+                        <label className="admin-checkbox-field">
+                          <input
+                            type="checkbox"
+                            checked=${rejectionModal.addToWaitlist}
+                            onChange=${(event) =>
+                              setRejectionModal((current) => ({
+                                ...current,
+                                addToWaitlist: event.target.checked
+                              }))}
+                          />
+                          <span>Recusar e adicionar à fila de espera</span>
+                        </label>
+                      </div>
                     `
                   : null}
 
@@ -378,11 +463,11 @@ export function AdminRequestsPage({ loans, books, users, actions }) {
                   <button type="button" className="admin-secondary" onClick=${() => setRejectionModal(null)}>
                     Cancelar
                   </button>
-                  <button type="button" className="admin-primary" onClick=${handleRejectSubmit}>
+                  <button type="submit" className="admin-primary">
                     Confirmar recusa
                   </button>
                 </div>
-              </div>
+              </form>
             </div>
           `
         : null}

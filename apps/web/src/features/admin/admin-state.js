@@ -291,6 +291,7 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
   const syncReadyRef = useRef(false);
   const remoteStateLoadedRef = useRef(false);
   const syncAnchorRef = useRef(null);
+  const pendingSyncRef = useRef(null);
   const adminApi = useMemo(
     () => (apiBaseUrl ? createAdminApiClient(apiBaseUrl) : null),
     [apiBaseUrl]
@@ -316,6 +317,7 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
     syncReadyRef.current = false;
     remoteStateLoadedRef.current = false;
     syncAnchorRef.current = null;
+    pendingSyncRef.current = null;
   }, [currentUserId, currentUserRole]);
 
   useEffect(() => {
@@ -360,6 +362,12 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
       setStateBase(() => hydratedState);
       remoteStateLoadedRef.current = true;
       syncReadyRef.current = true;
+
+      if (pendingSyncRef.current) {
+        const pendingSnapshot = pendingSyncRef.current;
+        pendingSyncRef.current = null;
+        void persistAdminStateSnapshot(pendingSnapshot);
+      }
 
       return response;
     } catch {
@@ -413,6 +421,7 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
     }
 
     if (!syncReadyRef.current || !remoteStateLoadedRef.current) {
+      pendingSyncRef.current = snapshot;
       return;
     }
 
@@ -425,8 +434,9 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
       if (result?.adminStateUpdatedAt) {
         syncAnchorRef.current = result.adminStateUpdatedAt;
       }
+      pendingSyncRef.current = null;
     } catch {
-      // Keep the optimistic local state if the backend is temporarily out of sync.
+      pendingSyncRef.current = snapshot;
     }
   };
 
@@ -1487,6 +1497,53 @@ function assignBookToUser(userId, bookId) {
     return result;
   }
 
+  function archiveLoan(loanId) {
+    let result = {
+      success: false,
+      message: "Não foi possível arquivar a solicitação."
+    };
+
+    setState((current) => {
+      const target = current.loans.find((loan) => loan.id === loanId);
+
+      if (!target) {
+        result = {
+          success: false,
+          message: "Solicitação não encontrada."
+        };
+        return current;
+      }
+
+      if (normalizeLoanStatus(target.status) !== "RECUSADO") {
+        result = {
+          success: false,
+          message: "Apenas solicitações recusadas podem ser arquivadas."
+        };
+        return current;
+      }
+
+      const updatedLoan = normalizeAdminLoan({
+        ...target,
+        status: "ARQUIVADO",
+        archivedAt: new Date().toISOString()
+      });
+      const loans = current.loans.map((loan) => (loan.id === loanId ? updatedLoan : loan));
+
+      result = {
+        success: true,
+        message: "Solicitação arquivada com sucesso."
+      };
+
+      return {
+        ...current,
+        loans,
+        users: syncUsersWithLoans(current.users, loans)
+      };
+    });
+
+    return result;
+  }
+
   function confirmPickup(loanId) {
     let result = {
       success: false,
@@ -1873,6 +1930,7 @@ function assignBookToUser(userId, bookId) {
       removeWaitlistEntry,
       approveLoan,
       rejectLoan,
+      archiveLoan,
       confirmPickup,
       markReturned,
       requestReturn,
@@ -2144,6 +2202,7 @@ function normalizeAdminLoan(loan) {
     returnRequestedAt: loan.returnRequestedAt ?? "",
     returnApprovedAt: loan.returnApprovedAt ?? "",
     returnRejectedAt: loan.returnRejectedAt ?? "",
+    archivedAt: loan.archivedAt ?? "",
     rejectionReason: loan.rejectionReason ?? "",
     rejectionAddsToWaitlist: Boolean(loan.rejectionAddsToWaitlist),
     notes: loan.notes ?? ""
@@ -2456,7 +2515,7 @@ function createWaitlistEntry({ waitlists, bookId, userId }) {
     (entry) =>
       entry.bookId === bookId &&
       entry.userId === userId &&
-      normalizeWaitlistStatus(entry.status) === "AGUARDANDO_FILA"
+      normalizeWaitlistStatus(entry.status) === "EM_FILA"
   );
 
   if (existing) {
@@ -2472,7 +2531,7 @@ function createWaitlistEntry({ waitlists, bookId, userId }) {
     bookId,
     userId,
     requestedAt: new Date().toISOString(),
-    status: "AGUARDANDO_FILA"
+    status: "EM_FILA"
   });
 
   return {
@@ -2510,7 +2569,7 @@ function promoteWaitlistAfterReturn({ state, bookId }) {
     const nextWaiting = waitlists.find(
       (entry) =>
         entry.bookId === bookId &&
-        normalizeWaitlistStatus(entry.status) === "AGUARDANDO_FILA"
+        normalizeWaitlistStatus(entry.status) === "EM_FILA"
     );
 
     if (!nextWaiting) {
@@ -2628,7 +2687,7 @@ function normalizeWaitlistEntry(entry) {
     bookId: entry.bookId ?? "",
     userId: entry.userId ?? "",
     requestedAt: entry.requestedAt ?? new Date().toISOString(),
-    status: normalizeWaitlistStatus(entry.status ?? "AGUARDANDO_FILA"),
+    status: normalizeWaitlistStatus(entry.status ?? "EM_FILA"),
     readyAt: entry.readyAt ?? "",
     readyUntil: entry.readyUntil ?? "",
     notificationId: entry.notificationId ?? "",

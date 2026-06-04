@@ -165,7 +165,7 @@ export function BookCatalog({
           : pendingLoan
           ? normalizeLoanStatus(pendingLoan.status)
           : bookWaitlistCount > 0
-          ? "AGUARDANDO_FILA"
+          ? "EM_FILA"
           : isOutOfStock
           ? "EMPRESTADO"
           : isUnavailable
@@ -1454,6 +1454,8 @@ function translateLoanStatus(status) {
       return "Devolvido";
     case "RECUSADO":
       return "Solicitação negada";
+    case "ARQUIVADO":
+      return "Solicitação arquivada";
     case "CANCELADO":
       return "Solicitação cancelada";
     default:
@@ -1501,6 +1503,9 @@ function getBookStatusKey(status) {
     case "RECUSADO":
     case "CANCELADO":
       return "rejected";
+    case "ARQUIVADO":
+      return "archived";
+    case "EM_FILA":
     case "AGUARDANDO_FILA":
       return "pending";
     default:

@@ -3,16 +3,18 @@ const OFFICIAL_LOAN_STATUS_LABELS = {
   PENDENTE_APROVACAO: "Pendente de aprovação",
   APROVADO: "Aprovado",
   EMPRESTADO: "Emprestado",
-  AGUARDANDO_FILA: "Aguardando fila",
+  EM_FILA: "Em fila",
   DEVOLUCAO_SOLICITADA: "Devolução solicitada",
   DEVOLUCAO_APROVADA: "Devolução aprovada",
   DEVOLVIDO: "Devolvido",
   RECUSADO: "Recusado",
+  ARQUIVADO: "Arquivado",
   CANCELADO: "Cancelado"
 };
 
 const OFFICIAL_WAITLIST_STATUS_LABELS = {
-  AGUARDANDO_FILA: "Aguardando fila"
+  EM_FILA: "Em fila",
+  AGUARDANDO_CONFIRMACAO: "Aguardando confirmação"
 };
 
 export const MAX_WAITLIST_BOOKS_PER_USER = 5;
@@ -48,14 +50,18 @@ export function normalizeLoanStatus(status) {
       return "DEVOLUCAO_APROVADA";
     case "WAITING":
     case "AGUARDANDO_FILA":
+    case "EM_FILA":
     case "READY":
-      return "AGUARDANDO_FILA";
+      return "EM_FILA";
     case "RETURNED":
     case "DEVOLVIDO":
       return "DEVOLVIDO";
     case "REJECTED":
     case "REJEITADO":
       return "RECUSADO";
+    case "ARCHIVED":
+    case "ARQUIVADO":
+      return "ARQUIVADO";
     case "CANCELLED":
     case "CANCELADO":
       return "CANCELADO";
@@ -70,8 +76,9 @@ export function normalizeWaitlistStatus(status) {
   switch (normalized) {
     case "WAITING":
     case "AGUARDANDO_FILA":
+    case "EM_FILA":
     case "READY":
-      return "AGUARDANDO_FILA";
+      return "EM_FILA";
     case "AGUARDANDO_CONFIRMACAO":
       return "AGUARDANDO_CONFIRMACAO";
     case "CANCELLED":
@@ -79,7 +86,7 @@ export function normalizeWaitlistStatus(status) {
     case "EXPIRED":
       return "CANCELADO";
     default:
-      return "AGUARDANDO_FILA";
+      return "EM_FILA";
   }
 }
 
@@ -88,7 +95,7 @@ export function getLoanStatusLabel(status) {
 }
 
 export function getWaitlistStatusLabel(status) {
-  return OFFICIAL_WAITLIST_STATUS_LABELS[normalizeWaitlistStatus(status)] ?? "Aguardando fila";
+  return OFFICIAL_WAITLIST_STATUS_LABELS[normalizeWaitlistStatus(status)] ?? "Em fila";
 }
 
 export function isLoanBorrowed(status) {
@@ -128,7 +135,7 @@ export function isLoanActive(status) {
 
 export function isWaitlistEntryActive(entry) {
   const normalized = normalizeWaitlistStatus(entry?.status);
-  return normalized === "AGUARDANDO_FILA";
+  return normalized === "EM_FILA";
 }
 
 export function countBookWaitlistEntries(waitlists, bookId) {

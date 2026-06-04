@@ -1223,7 +1223,7 @@ async function handleJoinWaitlist(response, body, adminStateStore, repository, r
     (entry) =>
       String(entry.bookId) === bookId &&
       String(entry.userId) === userId &&
-      entry.status === "AGUARDANDO_FILA"
+      normalizeWaitlistStatus(entry.status) === "EM_FILA"
   );
 
   if (existing) {
@@ -1255,7 +1255,7 @@ async function handleJoinWaitlist(response, body, adminStateStore, repository, r
     bookId,
     userId,
     requestedAt: new Date().toISOString(),
-    status: "AGUARDANDO_FILA"
+    status: "EM_FILA"
   });
   const waitlistPosition = getWaitlistPosition([...normalizedWaitlists, waitlist], bookId, userId);
   const notifications = pushWaitlistNotification(
@@ -1500,13 +1500,16 @@ function normalizeLoanStatus(status) {
     case "WAITING":
     case "AGUARDANDO_FILA":
     case "READY":
-      return "AGUARDANDO_FILA";
+      return "EM_FILA";
     case "RETURNED":
     case "DEVOLVIDO":
       return "DEVOLVIDO";
     case "REJECTED":
     case "REJEITADO":
       return "RECUSADO";
+    case "ARCHIVED":
+    case "ARQUIVADO":
+      return "ARQUIVADO";
     case "CANCELLED":
     case "CANCELADO":
       return "CANCELADO";
@@ -1809,18 +1812,27 @@ function normalizeWaitlistStatus(status) {
     return "AGUARDANDO_CONFIRMACAO";
   }
 
+  if (
+    normalized === "EM_FILA" ||
+    normalized === "AGUARDANDO_FILA" ||
+    normalized === "WAITING" ||
+    normalized === "READY"
+  ) {
+    return "EM_FILA";
+  }
+
   if (normalized === "CANCELADO" || normalized === "CANCELLED" || normalized === "EXPIRED") {
     return "CANCELADO";
   }
 
-  return "AGUARDANDO_FILA";
+  return "EM_FILA";
 }
 
 function countUserWaitlistEntries(waitlists, userId) {
   const seen = new Set();
 
   for (const entry of Array.isArray(waitlists) ? waitlists : []) {
-    if (String(entry.userId) !== String(userId) || entry.status !== "AGUARDANDO_FILA") {
+    if (String(entry.userId) !== String(userId) || normalizeWaitlistStatus(entry.status) !== "EM_FILA") {
       continue;
     }
 
