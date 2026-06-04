@@ -313,6 +313,19 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
     });
   };
 
+  async function fetchLatestAdminStateAnchor() {
+    if (!adminApi || typeof adminApi.fetchState !== "function") {
+      return null;
+    }
+
+    try {
+      const response = await adminApi.fetchState();
+      return response?.adminStateUpdatedAt ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   useEffect(() => {
     syncReadyRef.current = false;
     remoteStateLoadedRef.current = false;
@@ -435,7 +448,35 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
         syncAnchorRef.current = result.adminStateUpdatedAt;
       }
       pendingSyncRef.current = null;
-    } catch {
+    } catch (error) {
+      const message = String(error?.message ?? "");
+      const isStaleConflict =
+        message.includes("stale_admin_state") ||
+        message.toLowerCase().includes("atualizado em outro navegador");
+
+      if (isStaleConflict) {
+        const latestUpdatedAt = await fetchLatestAdminStateAnchor();
+
+        if (latestUpdatedAt) {
+          syncAnchorRef.current = latestUpdatedAt;
+
+          try {
+            const retryResult = await adminApi.syncState({
+              state: snapshot,
+              baseUpdatedAt: latestUpdatedAt
+            });
+
+            if (retryResult?.adminStateUpdatedAt) {
+              syncAnchorRef.current = retryResult.adminStateUpdatedAt;
+            }
+            pendingSyncRef.current = null;
+            return;
+          } catch {
+            // Fall through and keep the latest snapshot queued locally.
+          }
+        }
+      }
+
       pendingSyncRef.current = snapshot;
     }
   };
