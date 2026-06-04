@@ -2225,6 +2225,7 @@ function normalizeAdminLoan(loan) {
     bookId: loan.bookId ?? "",
     requesterId: loan.requesterId ?? loan.userId ?? "",
     requestedAt: loan.requestedAt ?? loan.borrowedAt ?? new Date().toISOString(),
+    levelAtLoan: loan.levelAtLoan ?? loan.level ?? "",
     type: loan.type === "digital" ? "digital" : "physical",
     status,
     responsible: loan.responsible ?? "",
