@@ -326,6 +326,14 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
     }
   }
 
+  function cloneAdminStateSnapshot(snapshot) {
+    if (typeof structuredClone === "function") {
+      return structuredClone(snapshot);
+    }
+
+    return JSON.parse(JSON.stringify(snapshot));
+  }
+
   useEffect(() => {
     syncReadyRef.current = false;
     remoteStateLoadedRef.current = false;
@@ -426,6 +434,8 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
       return;
     }
 
+    const snapshotPayload = cloneAdminStateSnapshot(snapshot);
+
     const canPersistCurrentUser =
       currentUserRole === "admin" && currentUserAccessStatus === "approved";
 
@@ -434,13 +444,13 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
     }
 
     if (!syncReadyRef.current || !remoteStateLoadedRef.current) {
-      pendingSyncRef.current = snapshot;
+      pendingSyncRef.current = snapshotPayload;
       return;
     }
 
     try {
       const result = await adminApi.syncState({
-        state: snapshot,
+        state: snapshotPayload,
         baseUpdatedAt: syncAnchorRef.current
       });
 
@@ -456,7 +466,7 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
 
         try {
           const retryResult = await adminApi.syncState({
-            state: snapshot,
+            state: snapshotPayload,
             baseUpdatedAt: latestUpdatedAt
           });
 
@@ -470,7 +480,7 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
         }
       }
 
-      pendingSyncRef.current = snapshot;
+      pendingSyncRef.current = snapshotPayload;
     }
   };
 
