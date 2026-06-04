@@ -448,32 +448,25 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
         syncAnchorRef.current = result.adminStateUpdatedAt;
       }
       pendingSyncRef.current = null;
-    } catch (error) {
-      const message = String(error?.message ?? "");
-      const isStaleConflict =
-        message.includes("stale_admin_state") ||
-        message.toLowerCase().includes("atualizado em outro navegador");
+    } catch {
+      const latestUpdatedAt = await fetchLatestAdminStateAnchor();
 
-      if (isStaleConflict) {
-        const latestUpdatedAt = await fetchLatestAdminStateAnchor();
+      if (latestUpdatedAt) {
+        syncAnchorRef.current = latestUpdatedAt;
 
-        if (latestUpdatedAt) {
-          syncAnchorRef.current = latestUpdatedAt;
+        try {
+          const retryResult = await adminApi.syncState({
+            state: snapshot,
+            baseUpdatedAt: latestUpdatedAt
+          });
 
-          try {
-            const retryResult = await adminApi.syncState({
-              state: snapshot,
-              baseUpdatedAt: latestUpdatedAt
-            });
-
-            if (retryResult?.adminStateUpdatedAt) {
-              syncAnchorRef.current = retryResult.adminStateUpdatedAt;
-            }
-            pendingSyncRef.current = null;
-            return;
-          } catch {
-            // Fall through and keep the latest snapshot queued locally.
+          if (retryResult?.adminStateUpdatedAt) {
+            syncAnchorRef.current = retryResult.adminStateUpdatedAt;
           }
+          pendingSyncRef.current = null;
+          return;
+        } catch {
+          // Fall through and keep the latest snapshot queued locally.
         }
       }
 
@@ -1659,8 +1652,10 @@ function assignBookToUser(userId, bookId) {
 
     setState((current) => {
       const target = current.loans.find((loan) => loan.id === loanId);
+      const book = current.books.find((item) => item.id === target?.bookId);
+      const user = current.users.find((item) => item.id === target?.userId);
 
-      if (!target) {
+      if (!target || !book || !user) {
         result = {
           success: false,
           message: "Empréstimo não encontrado."
