@@ -426,7 +426,9 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
         return null;
       }
 
-      const hydratedState = stabilizeAdminState(mergeCatalogIntoState(catalog, response.adminState));
+      const hydratedState = stabilizeAdminState(
+        mergeCatalogIntoState(catalog, mergeAdminStateSnapshots(response.adminState, readAdminState()))
+      );
       syncAnchorRef.current = response.adminStateUpdatedAt ?? syncAnchorRef.current;
       setStateBase(() => hydratedState);
       remoteStateLoadedRef.current = true;
