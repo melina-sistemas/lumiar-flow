@@ -159,8 +159,16 @@ export function App() {
   const isUsersRoute = location.pathname.startsWith("/usuarios");
   const isReportsRoute = location.pathname.startsWith("/relatorios");
   const showHeaderSearch = isBooksRoute || isUsersRoute || isReportsRoute;
-  const displayUsers = adminPanel.users;
-  const displayBooks = adminPanel.books;
+  const allUsers = adminPanel.users;
+  const allBooks = adminPanel.books;
+  const displayUsers = useMemo(
+    () => allUsers.filter((user) => !user.deletedAt),
+    [allUsers]
+  );
+  const displayBooks = useMemo(
+    () => allBooks.filter((book) => !book.deletedAt),
+    [allBooks]
+  );
   const displayLoans = adminPanel.loans;
   const displayWaitlists = adminPanel.waitlists;
   const displayNotifications = adminPanel.notifications;
@@ -219,8 +227,8 @@ export function App() {
     [catalog.returns, displayBooks, displayUsers, headerSearchQuery, isBooksRoute, isReportsRoute, isUsersRoute, libraryBooks]
   );
   const matchedSessionUser =
-    displayUsers.find((user) => user.id === authUser?.id) ||
-    displayUsers.find(
+    allUsers.find((user) => user.id === authUser?.id) ||
+    allUsers.find(
       (user) => user.email && authUser?.email && user.email.toLowerCase() === authUser.email.toLowerCase()
     ) ||
     null;
@@ -363,6 +371,12 @@ export function App() {
     }
 
     if (!matchedSessionUser) {
+      return;
+    }
+
+    if (matchedSessionUser.deletedAt) {
+      setAuthUser(null);
+      navigate("/entrar", { replace: true });
       return;
     }
 
@@ -1101,8 +1115,8 @@ export function App() {
               activeAuthUser,
               adminPanel,
               React.createElement(AdminBooksPage, {
-                books: adminPanel.books,
-                users: adminPanel.users,
+                books: displayBooks,
+                users: displayUsers,
                 loans: adminPanel.loans,
                 actions: adminPanel.actions,
                 apiBaseUrl
@@ -1128,9 +1142,9 @@ export function App() {
               activeAuthUser,
               adminPanel,
               React.createElement(AdminUsersPage, {
-                users: adminPanel.users,
+                users: displayUsers,
                 loans: adminPanel.loans,
-                books: adminPanel.books,
+                books: allBooks,
                 actions: adminPanel.actions
               })
             )}

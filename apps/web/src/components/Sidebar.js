@@ -14,7 +14,7 @@ const MAIN_NAV = [
 ];
 
 const ADMIN_NAV = [
-  { label: "Livros", to: "/admin/books", icon: "books" },
+  { label: "Gerenciar Livros", to: "/admin/books", icon: "books" },
   { label: "Solicitações", to: "/admin/loans", icon: "requests" },
   { label: "Usuários", to: "/admin/users", icon: "users" },
   { label: "Regras", to: "/admin/rules", icon: "shield" },

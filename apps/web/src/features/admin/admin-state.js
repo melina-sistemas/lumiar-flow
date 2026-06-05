@@ -162,7 +162,11 @@ const stabilizeAdminState = (rawState = {}) => {
     const normalizedEmail = String(input.email || "").trim().toLowerCase();
 
     if (
-      state.users.some((user) => String(user.email || "").trim().toLowerCase() === normalizedEmail)
+      state.users.some(
+        (user) =>
+          !user.deletedAt &&
+          String(user.email || "").trim().toLowerCase() === normalizedEmail
+      )
     ) {
       return {
         success: false,
@@ -334,6 +338,48 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
     return JSON.parse(JSON.stringify(snapshot));
   }
 
+  function isRetryableAdminStateSyncError(error) {
+    const status = Number(error?.status ?? 0);
+
+    if (!status) {
+      return true;
+    }
+
+    return status >= 500 && status < 600;
+  }
+
+  function delay(ms) {
+    return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
+  }
+
+  async function syncAdminStateSnapshot(snapshotPayload, baseUpdatedAt) {
+    if (!adminApi || typeof adminApi.syncState !== "function") {
+      return null;
+    }
+
+    const maxAttempts = 3;
+    let lastError = null;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      try {
+        return await adminApi.syncState({
+          state: snapshotPayload,
+          baseUpdatedAt
+        });
+      } catch (error) {
+        lastError = error;
+
+        if (!isRetryableAdminStateSyncError(error) || attempt === maxAttempts - 1) {
+          throw error;
+        }
+
+        await delay(250 * (attempt + 1));
+      }
+    }
+
+    throw lastError;
+  }
+
   useEffect(() => {
     syncReadyRef.current = false;
     remoteStateLoadedRef.current = false;
@@ -346,7 +392,9 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
       return;
     }
 
-    const persistedState = catalog.adminStateUpdatedAt ? catalog.adminState : readAdminState();
+    const persistedState = catalog.adminStateUpdatedAt
+      ? mergeAdminStateSnapshots(catalog.adminState, readAdminState())
+      : readAdminState();
 
     setStateBase((current) =>
       stabilizeAdminState(
@@ -449,10 +497,7 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
     }
 
     try {
-      const result = await adminApi.syncState({
-        state: snapshotPayload,
-        baseUpdatedAt: syncAnchorRef.current
-      });
+      const result = await syncAdminStateSnapshot(snapshotPayload, syncAnchorRef.current);
 
       if (result?.adminStateUpdatedAt) {
         syncAnchorRef.current = result.adminStateUpdatedAt;
@@ -466,10 +511,7 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
         syncAnchorRef.current = latestUpdatedAt;
 
         try {
-          const retryResult = await adminApi.syncState({
-            state: snapshotPayload,
-            baseUpdatedAt: latestUpdatedAt
-          });
+          const retryResult = await syncAdminStateSnapshot(snapshotPayload, latestUpdatedAt);
 
           if (retryResult?.adminStateUpdatedAt) {
             syncAnchorRef.current = retryResult.adminStateUpdatedAt;
@@ -627,13 +669,20 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
   }
 
   function removeBook(bookId) {
+    const deletedAt = new Date().toISOString();
+
     setState((current) =>
       stabilizeAdminState({
         ...current,
-        books: current.books.filter((book) => book.id !== bookId),
-        loans: current.loans.filter((loan) => loan.bookId !== bookId),
-        waitlists: current.waitlists.filter((entry) => entry.bookId !== bookId),
-        notifications: current.notifications.filter((entry) => entry.bookId !== bookId)
+        books: current.books.map((book) =>
+          book.id === bookId
+            ? normalizeAdminBook({
+                ...book,
+                deletedAt,
+                isActive: false
+              })
+            : book
+        )
       })
     );
   }
@@ -651,9 +700,10 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
         const nextBook = normalizeAdminBook(rawBook);
         const duplicate = merged.find(
           (book) =>
-            book.id === nextBook.id ||
+            !book.deletedAt &&
+            (book.id === nextBook.id ||
             `${book.title}:${book.author}`.toLowerCase() ===
-              `${nextBook.title}:${nextBook.author}`.toLowerCase()
+              `${nextBook.title}:${nextBook.author}`.toLowerCase())
         );
 
         if (duplicate) {
@@ -695,7 +745,9 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
     setState((current) => {
       const normalizedEmail = String(input.email || "").trim().toLowerCase();
       const duplicate = current.users.find(
-        (user) => String(user.email || "").trim().toLowerCase() === normalizedEmail
+        (user) =>
+          !user.deletedAt &&
+          String(user.email || "").trim().toLowerCase() === normalizedEmail
       );
 
       if (duplicate) {
@@ -747,7 +799,9 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
     setState((current) => {
       const normalizedEmail = String(input.email || "").trim().toLowerCase();
       const duplicate = current.users.find(
-        (user) => String(user.email || "").trim().toLowerCase() === normalizedEmail
+        (user) =>
+          !user.deletedAt &&
+          String(user.email || "").trim().toLowerCase() === normalizedEmail
       );
 
       if (duplicate) {
@@ -837,13 +891,21 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
   }
 
   function removeUser(userId) {
+    const deletedAt = new Date().toISOString();
+
     setState((current) =>
       stabilizeAdminState({
         ...current,
-        users: current.users.filter((user) => user.id !== userId),
-        loans: current.loans.filter((loan) => loan.userId !== userId),
-        waitlists: current.waitlists.filter((entry) => entry.userId !== userId),
-        notifications: current.notifications.filter((entry) => entry.userId !== userId)
+        users: current.users.map((user) =>
+          user.id === userId
+            ? normalizeAdminUser({
+                ...user,
+                deletedAt,
+                accessStatus: "blocked",
+                status: "blocked"
+              })
+            : user
+        )
       })
     );
   }
@@ -2041,6 +2103,54 @@ function createAdminState(rawState = {}) {
   };
 }
 
+function mergeAdminStateSnapshots(remoteState = {}, localState = {}) {
+  const remote = normalizeAdminState(remoteState);
+  const local = normalizeAdminState(localState);
+  const booksById = new Map(remote.books.map((book) => [book.id, book]));
+  const usersById = new Map(remote.users.map((user) => [user.id, user]));
+
+  for (const localBook of local.books) {
+    if (!localBook.deletedAt) {
+      continue;
+    }
+
+    const currentBook = booksById.get(localBook.id);
+    booksById.set(
+      localBook.id,
+      normalizeAdminBook({
+        ...(currentBook ?? {}),
+        ...localBook,
+        deletedAt: localBook.deletedAt,
+        isActive: false
+      })
+    );
+  }
+
+  for (const localUser of local.users) {
+    if (!localUser.deletedAt) {
+      continue;
+    }
+
+    const currentUser = usersById.get(localUser.id);
+    usersById.set(
+      localUser.id,
+      normalizeAdminUser({
+        ...(currentUser ?? {}),
+        ...localUser,
+        deletedAt: localUser.deletedAt,
+        accessStatus: localUser.accessStatus ?? "blocked",
+        status: localUser.status ?? "blocked"
+      })
+    );
+  }
+
+  return {
+    ...remote,
+    books: Array.from(booksById.values()),
+    users: Array.from(usersById.values())
+  };
+}
+
 function mergeById(seedItems, currentItems) {
   const map = new Map(seedItems.map((item) => [item.id, item]));
 
@@ -2177,7 +2287,8 @@ function normalizeAdminBook(book) {
     totalCopies: totalQuantity,
     availableCopies: normalizedAvailable,
     isPremium: Boolean(book.isPremium),
-    isActive: book.isActive !== false
+    isActive: book.isActive !== false,
+    deletedAt: String(book.deletedAt ?? "").trim() || null
   };
 }
 
@@ -2215,6 +2326,7 @@ function normalizeAdminUser(user) {
     rejectionReason: user.rejectionReason ?? "",
     createdAt: user.createdAt ?? null,
     updatedAt: user.updatedAt ?? null,
+    deletedAt: String(user.deletedAt ?? "").trim() || null,
     createdByAdmin: Boolean(user.createdByAdmin),
     mustChangePassword: Boolean(user.mustChangePassword),
     readingList: Array.isArray(user.readingList) ? user.readingList : [],

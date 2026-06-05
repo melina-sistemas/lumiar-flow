@@ -81,9 +81,12 @@ async function request(url, init) {
   }
 
   if (!response.ok) {
-    throw new Error(
+    const error = new Error(
       data?.error?.message || data?.message || `Admin request failed (${response.status}).`
     );
+    error.status = response.status;
+    error.payload = data;
+    throw error;
   }
 
   return data;

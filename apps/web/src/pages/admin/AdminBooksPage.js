@@ -386,8 +386,8 @@ export function AdminBooksPage({ books, users, loans, actions, apiBaseUrl }) {
 
   return html`
     <${AdminPageLayout}
-      title="Catálogo de Livros"
-      breadcrumb="Livros"
+      title="Gerenciar Livros"
+      breadcrumb="Gerenciar Livros"
       description="Explore, organize e destaque o acervo da biblioteca."
       actions=${actionButtons}
       filters=${filters}
