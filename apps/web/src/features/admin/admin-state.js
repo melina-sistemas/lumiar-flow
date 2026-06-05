@@ -2104,8 +2104,8 @@ function createAdminState(rawState = {}) {
 }
 
 function mergeAdminStateSnapshots(remoteState = {}, localState = {}) {
-  const remote = normalizeAdminState(remoteState);
-  const local = normalizeAdminState(localState);
+  const remote = createAdminState(remoteState);
+  const local = createAdminState(localState);
   const booksById = new Map(remote.books.map((book) => [book.id, book]));
   const usersById = new Map(remote.users.map((user) => [user.id, user]));
 
