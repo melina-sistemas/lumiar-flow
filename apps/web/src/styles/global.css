@@ -5,16 +5,31 @@
   --success: #16a34a;
   --warning: #d97706;
   --danger: #dc2626;
-  --background: rgb(238, 238, 238);
-  --surface: #f7fbff;
-  --card: #ffffff;
-  --text: #15212b;
-  --text-soft: #31414f;
-  --muted: #7b8791;
+  --background-primary: rgb(238, 238, 238);
+  --background-secondary: #f7fbff;
+  --surface-primary: #ffffff;
+  --surface-secondary: #eef5fb;
+  --text-primary: #15212b;
+  --text-secondary: #31414f;
+  --text-muted: #5f6d7a;
+  --border-subtle: rgba(6, 147, 227, 0.12);
+  --border-strong: rgba(21, 33, 43, 0.12);
+  --control-height: 44px;
+  --control-height-sm: 40px;
+  --control-radius: 14px;
+  --control-radius-lg: 16px;
+  --control-padding-inline: 16px;
+  --control-padding-inline-lg: 18px;
+  --background: var(--background-primary);
+  --surface: var(--background-secondary);
+  --card: var(--surface-primary);
+  --text: var(--text-primary);
+  --text-soft: var(--text-secondary);
+  --muted: var(--text-muted);
   --sidebar: #0f172a;
   --sidebar-text: #ffffff;
   --sidebar-border: rgba(255, 255, 255, 0.08);
-  --border: rgba(6, 147, 227, 0.12);
+  --border: var(--border-subtle);
   --shadow: 0 12px 28px rgba(17, 24, 39, 0.08);
   --shadow-hover: 0 22px 46px rgba(17, 24, 39, 0.14);
   --radius-lg: 24px;
@@ -54,16 +69,25 @@ body[data-brand-layout="editorial"] {
 }
 
 body[data-brand-theme="dark"] {
-  --background: #06111f;
-  --surface: #0d1727;
-  --card: #0f1b2e;
-  --text: #e6edf7;
-  --text-soft: #c2cfdd;
-  --muted: #90a0b4;
+  --background-primary: #06111f;
+  --background-secondary: #0d1727;
+  --surface-primary: #0f1b2e;
+  --surface-secondary: #14243b;
+  --text-primary: #e6edf7;
+  --text-secondary: #c2cfdd;
+  --text-muted: #96a7ba;
+  --border-subtle: rgba(148, 163, 184, 0.18);
+  --border-strong: rgba(148, 163, 184, 0.24);
+  --background: var(--background-primary);
+  --surface: var(--background-secondary);
+  --card: var(--surface-primary);
+  --text: var(--text-primary);
+  --text-soft: var(--text-secondary);
+  --muted: var(--text-muted);
   --sidebar: #08111f;
   --sidebar-text: #f8fafc;
   --sidebar-border: rgba(148, 163, 184, 0.16);
-  --border: rgba(148, 163, 184, 0.18);
+  --border: var(--border-subtle);
   --shadow: 0 16px 38px rgba(0, 0, 0, 0.28);
   --shadow-hover: 0 22px 46px rgba(0, 0, 0, 0.34);
   --app-shell-gradient:
@@ -151,6 +175,115 @@ body[data-brand-theme="dark"] .branding-reset-button {
   background: var(--surface);
   color: var(--text);
   border-color: var(--border);
+}
+
+body[data-brand-theme="dark"] :is(
+  .admin-primary,
+  .admin-secondary,
+  .book-read-button,
+  .book-footer button,
+  .header-ghost-link,
+  .header-primary-link,
+  .branding-reset-button,
+  .account-toggle-button,
+  .admin-stepper-button,
+  .admin-button-danger,
+  .admin-link
+) {
+  box-shadow: none;
+}
+
+body[data-brand-theme="dark"] .admin-secondary,
+body[data-brand-theme="dark"] .admin-link {
+  background: rgba(148, 163, 184, 0.12);
+  color: #e2e8f0;
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+body[data-brand-theme="dark"] .admin-link.danger,
+body[data-brand-theme="dark"] .admin-icon-button.danger {
+  background: rgba(239, 68, 68, 0.12);
+  color: #fecaca;
+  border-color: rgba(239, 68, 68, 0.18);
+}
+
+body[data-brand-theme="dark"] .admin-primary,
+body[data-brand-theme="dark"] .book-footer button {
+  background: linear-gradient(180deg, #1d4ed8 0%, #1e40af 100%);
+  color: #f8fafc;
+}
+
+body[data-brand-theme="dark"] .book-read-button {
+  background: rgba(59, 130, 246, 0.14);
+  color: #bfdbfe;
+  border-color: rgba(59, 130, 246, 0.22);
+}
+
+body[data-brand-theme="dark"] .book-status {
+  background: rgba(148, 163, 184, 0.12);
+  color: #dbe4f0;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+body[data-brand-theme="dark"] .admin-badge,
+body[data-brand-theme="dark"] .admin-user-badge,
+body[data-brand-theme="dark"] .level-badge,
+body[data-brand-theme="dark"] .status-badge,
+body[data-brand-theme="dark"] .quality-score,
+body[data-brand-theme="dark"] .quality-pill {
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+body[data-brand-theme="dark"] .admin-badge.type-physical,
+body[data-brand-theme="dark"] .admin-user-badge.user,
+body[data-brand-theme="dark"] .admin-user-badge.staff {
+  background: rgba(59, 130, 246, 0.14);
+  color: #bfdbfe;
+}
+
+body[data-brand-theme="dark"] .admin-badge.type-digital {
+  background: rgba(34, 197, 94, 0.16);
+  color: #bbf7d0;
+}
+
+body[data-brand-theme="dark"] .admin-badge.status-active,
+body[data-brand-theme="dark"] .admin-user-badge.status.active,
+body[data-brand-theme="dark"] .admin-user-badge.status.approved,
+body[data-brand-theme="dark"] .status-badge.success {
+  background: rgba(34, 197, 94, 0.16);
+  color: #bbf7d0;
+}
+
+body[data-brand-theme="dark"] .admin-badge.status-inactive,
+body[data-brand-theme="dark"] .admin-badge.status-rejected,
+body[data-brand-theme="dark"] .admin-user-badge.status.blocked,
+body[data-brand-theme="dark"] .admin-user-badge.status.rejected,
+body[data-brand-theme="dark"] .status-badge.error {
+  background: rgba(239, 68, 68, 0.16);
+  color: #fecaca;
+}
+
+body[data-brand-theme="dark"] .admin-badge.status-archived {
+  background: rgba(100, 116, 139, 0.22);
+  color: #e2e8f0;
+}
+
+body[data-brand-theme="dark"] .level-badge.bronze,
+body[data-brand-theme="dark"] .admin-user-badge.bronze {
+  background: rgba(245, 158, 11, 0.16);
+  color: #fed7aa;
+}
+
+body[data-brand-theme="dark"] .level-badge.silver,
+body[data-brand-theme="dark"] .admin-user-badge.silver {
+  background: rgba(148, 163, 184, 0.2);
+  color: #e2e8f0;
+}
+
+body[data-brand-theme="dark"] .level-badge.gold,
+body[data-brand-theme="dark"] .admin-user-badge.gold {
+  background: rgba(250, 204, 21, 0.18);
+  color: #fde68a;
 }
 
 body[data-brand-theme="dark"] {
@@ -273,6 +406,79 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+button:not(:disabled),
+input:not(:disabled),
+select:not(:disabled),
+textarea:not(:disabled) {
+  transition:
+    transform 160ms ease,
+    opacity 160ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+:is(
+  .admin-primary,
+  .admin-secondary,
+  .book-read-button,
+  .book-footer button,
+  .header-ghost-link,
+  .header-primary-link,
+  .branding-reset-button,
+  .account-toggle-button,
+  .admin-stepper-button,
+  .admin-button-danger
+) {
+  min-height: var(--control-height);
+  padding-inline: var(--control-padding-inline);
+  border-radius: var(--control-radius);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+:is(.admin-primary, .admin-secondary, .book-read-button, .branding-reset-button, .account-toggle-button, .admin-stepper-button, .admin-button-danger, .header-ghost-link, .header-primary-link):disabled {
+  opacity: 0.56;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+:is(.header-icon-button, .header-profile-button, .admin-icon-button, .reader-icon-button, .reader-page-icon-button) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  min-height: 42px;
+  border-radius: 14px;
+}
+
+:is(.admin-badge, .admin-user-badge, .level-badge, .status-badge, .quality-score, .quality-pill) {
+  border: 1px solid transparent;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.admin-link {
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(6, 147, 227, 0.08);
+  color: var(--primary);
+}
+
+.admin-link.danger {
+  background: rgba(220, 38, 38, 0.08);
+  color: #b91c1c;
 }
 
 #root {
@@ -491,25 +697,27 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 7px 10px;
+  min-height: 30px;
+  padding: 0 10px;
   border-radius: 999px;
-  font-size: 0.76rem;
+  font-size: 0.78rem;
   font-weight: 700;
+  border: 1px solid transparent;
 }
 
 .level-badge.bronze {
-  color: #8a4b17;
-  background: rgba(251, 191, 36, 0.18);
+  color: #92400e;
+  background: rgba(251, 191, 36, 0.22);
 }
 
 .level-badge.silver {
-  color: #445569;
-  background: rgba(203, 213, 225, 0.28);
+  color: #475569;
+  background: rgba(203, 213, 225, 0.34);
 }
 
 .level-badge.gold {
-  color: #9a6700;
-  background: rgba(250, 204, 21, 0.22);
+  color: #a16207;
+  background: rgba(250, 204, 21, 0.24);
 }
 
 .app-main {
@@ -660,8 +868,6 @@ textarea {
 
 .header-icon-button {
   position: relative;
-  width: 42px;
-  height: 42px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.12);
@@ -2260,8 +2466,9 @@ textarea {
 .admin-primary,
 .admin-secondary {
   border: none;
-  border-radius: 14px;
-  padding: 12px 16px;
+  border-radius: var(--control-radius);
+  min-height: var(--control-height);
+  padding: 0 var(--control-padding-inline);
   cursor: pointer;
   box-shadow: none;
 }
@@ -2270,21 +2477,29 @@ textarea {
   background: var(--primary);
   color: #ffffff;
   font-weight: 700;
+  box-shadow: 0 10px 22px rgba(6, 147, 227, 0.22);
 }
 
 .admin-secondary {
   background: rgba(6, 147, 227, 0.1);
   color: var(--primary);
   font-weight: 600;
+  border: 1px solid rgba(6, 147, 227, 0.12);
 }
 
 .admin-link {
-  border: none;
-  background: transparent;
+  border: 1px solid transparent;
+  background: rgba(6, 147, 227, 0.08);
   color: var(--primary);
-  padding: 0;
-  font-weight: 600;
+  padding: 0 12px;
+  font-weight: 700;
   cursor: pointer;
+  min-height: 38px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   box-shadow: none;
 }
 
@@ -2296,7 +2511,9 @@ textarea {
 }
 
 .admin-link.danger {
-  color: #dc2626;
+  background: rgba(220, 38, 38, 0.08);
+  color: #b91c1c;
+  border-color: rgba(220, 38, 38, 0.12);
 }
 
 .admin-table-wrapper {
@@ -2351,10 +2568,10 @@ textarea {
 }
 
 .admin-icon-button {
-  width: 38px;
-  height: 38px;
-  border: none;
-  border-radius: 12px;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(6, 147, 227, 0.12);
+  border-radius: 14px;
   background: rgba(6, 147, 227, 0.08);
   color: var(--primary);
   cursor: pointer;
@@ -2363,7 +2580,8 @@ textarea {
 
 .admin-icon-button.danger {
   background: rgba(220, 38, 38, 0.08);
-  color: #dc2626;
+  color: #b91c1c;
+  border-color: rgba(220, 38, 38, 0.12);
 }
 
 .admin-table-actions {
@@ -2398,39 +2616,40 @@ textarea {
   justify-content: center;
   min-height: 30px;
   padding: 0 12px;
-  border-radius: 10px;
-  font-size: 0.84rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
   font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
 .admin-badge.type-physical {
-  background: rgba(6, 147, 227, 0.1);
-  color: var(--primary);
+  background: rgba(6, 147, 227, 0.12);
+  color: #075985;
 }
 
 .admin-badge.type-digital {
-  background: rgba(34, 197, 94, 0.12);
-  color: #15803d;
+  background: rgba(34, 197, 94, 0.14);
+  color: #166534;
 }
 
 .admin-badge.status-active {
-  background: rgba(34, 197, 94, 0.12);
-  color: #15803d;
+  background: rgba(34, 197, 94, 0.14);
+  color: #166534;
 }
 
 .admin-badge.status-inactive {
   background: rgba(220, 38, 38, 0.12);
-  color: #dc2626;
+  color: #991b1b;
 }
 
 .admin-badge.status-rejected {
   background: rgba(220, 38, 38, 0.12);
-  color: #dc2626;
+  color: #991b1b;
 }
 
 .admin-badge.status-archived {
   background: rgba(100, 116, 139, 0.16);
-  color: #475569;
+  color: #334155;
 }
 
 .admin-user-list,
@@ -2700,12 +2919,14 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 10px;
+  min-height: 30px;
+  padding: 0 10px;
   border-radius: 999px;
   font-size: 0.78rem;
   font-weight: 700;
-  background: rgba(6, 147, 227, 0.08);
-  color: #075b8b;
+  background: rgba(6, 147, 227, 0.1);
+  color: #075985;
+  border: 1px solid rgba(6, 147, 227, 0.12);
 }
 
 .admin-user-badge.staff {
@@ -2719,44 +2940,44 @@ textarea {
 }
 
 .admin-user-badge.admin {
-  background: rgba(245, 158, 11, 0.14);
-  color: #9a6700;
+  background: rgba(245, 158, 11, 0.16);
+  color: #92400e;
 }
 
 .admin-user-badge.bronze {
-  background: rgba(251, 191, 36, 0.16);
-  color: #8a4b17;
+  background: rgba(251, 191, 36, 0.18);
+  color: #92400e;
 }
 
 .admin-user-badge.silver {
-  background: rgba(203, 213, 225, 0.28);
+  background: rgba(203, 213, 225, 0.34);
   color: #475569;
 }
 
 .admin-user-badge.gold {
-  background: rgba(250, 204, 21, 0.18);
-  color: #9a6700;
+  background: rgba(250, 204, 21, 0.22);
+  color: #a16207;
 }
 
 .admin-user-badge.status.active,
 .admin-user-badge.status.approved {
-  background: rgba(22, 163, 74, 0.14);
-  color: #15803d;
+  background: rgba(22, 163, 74, 0.16);
+  color: #166534;
 }
 
 .admin-user-badge.status.pending {
-  background: rgba(245, 158, 11, 0.14);
-  color: #b45309;
+  background: rgba(245, 158, 11, 0.16);
+  color: #92400e;
 }
 
 .admin-user-badge.status.blocked {
   background: rgba(220, 38, 38, 0.12);
-  color: #b91c1c;
+  color: #991b1b;
 }
 
 .admin-user-badge.status.rejected {
   background: rgba(220, 38, 38, 0.12);
-  color: #b91c1c;
+  color: #991b1b;
 }
 
 .admin-modal-backdrop {
@@ -4631,9 +4852,10 @@ body[data-brand-theme="dark"] .rejection-modal-textarea {
 
 .book-footer button {
   width: 100%;
-  border: none;
-  border-radius: 14px;
-  padding: 12px 16px;
+  border: 1px solid rgba(6, 147, 227, 0.16);
+  border-radius: var(--control-radius);
+  min-height: var(--control-height);
+  padding: 0 var(--control-padding-inline);
   background: var(--primary);
   color: #ffffff;
   font-weight: 700;
@@ -4646,7 +4868,7 @@ body[data-brand-theme="dark"] .rejection-modal-textarea {
 
 .book-footer button:hover {
   transform: translateY(-1px);
-  background: #0479bc;
+  background: var(--primary-dark);
 }
 
 .book-footer button:disabled {
@@ -4659,10 +4881,10 @@ body[data-brand-theme="dark"] .rejection-modal-textarea {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 44px;
-  padding: 0 16px;
+  min-height: var(--control-height);
+  padding: 0 var(--control-padding-inline);
   border: 1px solid rgba(6, 147, 227, 0.18);
-  border-radius: 14px;
+  border-radius: var(--control-radius);
   background: rgba(6, 147, 227, 0.08);
   color: var(--primary);
   font-weight: 700;
@@ -4679,9 +4901,9 @@ body[data-brand-theme="dark"] .rejection-modal-textarea {
   justify-content: center;
   width: 100%;
   min-height: 46px;
-  border-radius: 14px;
+  border-radius: var(--control-radius);
   background: rgba(123, 135, 145, 0.12);
-  color: var(--muted);
+  color: var(--text-soft);
   font-size: 0.9rem;
   font-weight: 600;
 }
@@ -5831,11 +6053,11 @@ body[data-brand-theme="dark"] .account-history-empty {
 }
 
 .admin-page-size-control select {
-  min-height: 42px;
+  min-height: var(--control-height);
   padding: 0 14px;
-  border: 1px solid rgba(21, 33, 43, 0.12);
-  border-radius: 14px;
-  background: #ffffff;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--control-radius);
+  background: var(--surface-primary);
   box-shadow: var(--shadow-soft);
 }
 
@@ -5846,12 +6068,12 @@ body[data-brand-theme="dark"] .account-history-empty {
   justify-self: end;
   padding: 8px;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--surface-primary);
   box-shadow: inset 0 0 0 1px rgba(6, 147, 227, 0.08);
 }
 
 .ranking-pagination-actions .admin-secondary {
-  min-height: 42px;
+  min-height: var(--control-height);
   padding-inline: 18px;
 }
 
