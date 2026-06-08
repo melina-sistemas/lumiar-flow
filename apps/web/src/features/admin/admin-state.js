@@ -285,7 +285,7 @@ const stabilizeAdminState = (rawState = {}) => {
 
 export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", catalogReady = false) {
   const [state, setStateBase] = useState(() =>
-    stabilizeAdminState(createAdminState(readAdminState()))
+    stabilizeAdminState(createAdminState({}))
   );
   const currentUserId = currentUser?.id ?? "";
   const currentUserRole = currentUser?.role ?? "";
@@ -392,13 +392,16 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
       return;
     }
 
-    const persistedState = catalog.adminStateUpdatedAt
-      ? mergeAdminStateSnapshots(catalog.adminState, readAdminState())
-      : readAdminState();
+    const persistedState = catalog.adminStateUpdatedAt ? catalog.adminState : {};
+    const localState = readAdminState();
+    const mergedSnapshot = mergeAdminStateSnapshots(persistedState, localState);
 
     setStateBase((current) =>
       stabilizeAdminState(
-        mergeCatalogIntoState(catalog, persistedState && Object.keys(persistedState).length > 0 ? persistedState : current)
+        mergeCatalogIntoState(
+          catalog,
+          mergedSnapshot && Object.keys(mergedSnapshot).length > 0 ? mergedSnapshot : current
+        )
       )
     );
   }, [catalog, catalogReady]);
@@ -426,11 +429,15 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
         return null;
       }
 
-      const hydratedState = stabilizeAdminState(
-        mergeCatalogIntoState(catalog, mergeAdminStateSnapshots(response.adminState, readAdminState()))
-      );
       syncAnchorRef.current = response.adminStateUpdatedAt ?? syncAnchorRef.current;
-      setStateBase(() => hydratedState);
+      setStateBase((current) =>
+        stabilizeAdminState(
+          mergeCatalogIntoState(
+            catalog,
+            mergeAdminStateSnapshots(response.adminState, current)
+          )
+        )
+      );
       remoteStateLoadedRef.current = true;
       syncReadyRef.current = true;
 

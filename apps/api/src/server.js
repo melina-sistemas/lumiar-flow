@@ -61,7 +61,7 @@ export function createApiServer(repository, adminStateStore) {
 
       if (request.method === "POST" && pathname === "/auth/login") {
         const body = await readJsonBody(request);
-        return handleLogin(response, body, adminStateStore);
+        return handleLogin(response, body, adminStateStore, repository);
       }
 
       if (request.method === "POST" && pathname === "/auth/logout") {
@@ -69,7 +69,7 @@ export function createApiServer(repository, adminStateStore) {
       }
 
       if (request.method === "GET" && pathname === "/auth/me") {
-        return handleCurrentSession(response, request, adminStateStore);
+        return handleCurrentSession(response, request, adminStateStore, repository);
       }
 
       if (request.method === "GET" && pathname === "/seed") {
@@ -109,7 +109,7 @@ export function createApiServer(repository, adminStateStore) {
           return sendJson(response, currentUser.statusCode, currentUser.payload);
         }
 
-        const persistedAdminState = await adminStateStore.read();
+        const persistedAdminState = await readAdminStateSnapshot(adminStateStore, repository);
 
         return sendJson(response, 200, {
           success: true,
@@ -164,7 +164,7 @@ export function createApiServer(repository, adminStateStore) {
 
         if (result.success) {
           try {
-            await mirrorLoanRequestIntoAdminState(adminStateStore, body, result.data.loan);
+            await mirrorLoanRequestIntoAdminState(adminStateStore, repository, body, result.data.loan);
           } catch (error) {
             sentry.captureException(error);
           }
@@ -236,7 +236,7 @@ export function createApiServer(repository, adminStateStore) {
         });
 
         await repository.saveLoan(updatedLoan);
-        await mirrorLoanPickupIntoAdminState(adminStateStore, updatedLoan, currentUser.user);
+        await mirrorLoanPickupIntoAdminState(adminStateStore, repository, updatedLoan, currentUser.user);
 
         return sendJson(response, 200, {
           success: true,
@@ -318,7 +318,7 @@ export function createApiServer(repository, adminStateStore) {
         const body = await readJsonBody(request);
         const nextBooks = Array.isArray(body.books) ? body.books : [];
 
-        const currentState = await adminStateStore.read();
+        const currentState = await readAdminStateSnapshot(adminStateStore, repository);
         const nextState = {
           ...currentState.state,
           books: nextBooks
@@ -340,20 +340,6 @@ export function createApiServer(repository, adminStateStore) {
 
         const body = await readJsonBody(request);
         const nextState = normalizeAdminState(body.state ?? body);
-        const baseUpdatedAt = String(body.baseUpdatedAt ?? body.adminStateUpdatedAt ?? "").trim();
-        const currentState = await adminStateStore.read();
-
-        if (currentState.updatedAt && baseUpdatedAt !== currentState.updatedAt) {
-          return sendJson(response, 409, {
-            success: false,
-            error: {
-              code: "stale_admin_state",
-              message:
-                "O painel administrativo foi atualizado em outro navegador. Recarregue a página para sincronizar as alterações."
-            }
-          });
-        }
-
         const savedState = await adminStateStore.write(nextState);
 
         return sendJson(response, 200, {
@@ -371,7 +357,7 @@ export function createApiServer(repository, adminStateStore) {
         }
 
         const body = await readJsonBody(request);
-        const updatedUser = await updateAdminStateUser(adminStateStore, approveMatch[1], (user) => ({
+        const updatedUser = await updateAdminStateUser(adminStateStore, repository, approveMatch[1], (user) => ({
           ...user,
           role: normalizeUserRole(user.role),
           status: "approved",
@@ -409,7 +395,7 @@ export function createApiServer(repository, adminStateStore) {
         }
 
         const body = await readJsonBody(request);
-        const updatedUser = await updateAdminStateUser(adminStateStore, rejectMatch[1], (user) => ({
+        const updatedUser = await updateAdminStateUser(adminStateStore, repository, rejectMatch[1], (user) => ({
           ...user,
           status: "rejected",
           accessStatus: "rejected",
@@ -458,7 +444,7 @@ export function createApiServer(repository, adminStateStore) {
           });
         }
 
-        const updatedUser = await updateAdminStateUser(adminStateStore, currentUser.user.id, (user) => {
+        const updatedUser = await updateAdminStateUser(adminStateStore, repository, currentUser.user.id, (user) => {
           const nextPassword = hashPassword(newPassword);
 
           return {
@@ -589,7 +575,7 @@ async function handleRegister(response, body, adminStateStore, repository) {
     });
   }
 
-  const currentState = await adminStateStore.read();
+  const currentState = await readAdminStateSnapshot(adminStateStore, repository);
   const existingUser = findUserRecord(currentState.state.users, email);
   const snapshot = await repository.getLibrarySnapshot();
   const repositoryUser = findUserRecord(snapshot.users, email);
@@ -643,7 +629,7 @@ async function handleRegister(response, body, adminStateStore, repository) {
   });
 }
 
-async function handleLogin(response, body, adminStateStore) {
+async function handleLogin(response, body, adminStateStore, repository = null) {
   const email = String(body.email ?? "").trim().toLowerCase();
   const password = String(body.password ?? "").trim();
   const bootstrapEmail = String(process.env.BOOTSTRAP_ADMIN_EMAIL ?? "").trim().toLowerCase();
@@ -663,12 +649,12 @@ async function handleLogin(response, body, adminStateStore) {
     });
   }
 
-  let currentState = await adminStateStore.read();
+  let currentState = await readAdminStateSnapshot(adminStateStore, repository);
   let user = findUserRecord(currentState.state.users, email);
 
   if (!user && canRepairBootstrapAdmin) {
-    await ensureBootstrapAdmin(adminStateStore);
-    currentState = await adminStateStore.read();
+    await ensureBootstrapAdmin(adminStateStore, repository);
+    currentState = await readAdminStateSnapshot(adminStateStore, repository);
     user = findUserRecord(currentState.state.users, email);
   }
 
@@ -688,8 +674,8 @@ async function handleLogin(response, body, adminStateStore) {
     : String(user.password ?? "").trim() === password;
 
   if (!isPasswordValid && canRepairBootstrapAdmin) {
-    await ensureBootstrapAdmin(adminStateStore);
-    currentState = await adminStateStore.read();
+    await ensureBootstrapAdmin(adminStateStore, repository);
+    currentState = await readAdminStateSnapshot(adminStateStore, repository);
     user = findUserRecord(currentState.state.users, email);
     const repairedHasSecurePassword = Boolean(user?.passwordHash && user?.passwordSalt);
 
@@ -763,8 +749,8 @@ function handleLogout(response) {
   });
 }
 
-async function handleCurrentSession(response, request, adminStateStore) {
-  const session = await resolveSessionFromRequest(request, adminStateStore);
+async function handleCurrentSession(response, request, adminStateStore, repository) {
+  const session = await resolveSessionFromRequest(request, adminStateStore, repository);
 
   if (!session.ok) {
     if (session.clearCookie) {
@@ -804,7 +790,7 @@ async function handleCreateManagedUser(response, body, adminStateStore, reposito
     });
   }
 
-  const currentState = await adminStateStore.read();
+        const currentState = await readAdminStateSnapshot(adminStateStore, repository);
   const existingUser = findUserRecord(currentState.state.users, email);
   const snapshot = await repository.getLibrarySnapshot();
   const repositoryUser = findUserRecord(snapshot.users, email);
@@ -851,7 +837,7 @@ async function handleCreateManagedUser(response, body, adminStateStore, reposito
 }
 
 async function requireAuthenticatedUser(request, adminStateStore, repository, options = {}) {
-  const session = await resolveSessionFromRequest(request, adminStateStore);
+  const session = await resolveSessionFromRequest(request, adminStateStore, repository);
 
   if (!session.ok) {
     return {
@@ -936,7 +922,7 @@ async function requireAuthenticatedAdmin(request, adminStateStore, repository) {
   return current;
 }
 
-async function resolveSessionFromRequest(request, adminStateStore) {
+async function resolveSessionFromRequest(request, adminStateStore, repository = null) {
   const authConfig = getAuthConfig();
   const token = getSessionTokenFromRequest(request, authConfig);
   const payload = verifySessionToken(token, authConfig);
@@ -948,7 +934,7 @@ async function resolveSessionFromRequest(request, adminStateStore) {
     };
   }
 
-  const currentState = await adminStateStore.read();
+  const currentState = await readAdminStateSnapshot(adminStateStore, repository);
   const user = findUserRecord(currentState.state.users, payload.sub);
 
   if (!user) {
@@ -993,7 +979,7 @@ async function resolveSessionFromRequest(request, adminStateStore) {
 function createAuthenticatedRepository(repository, adminStateStore) {
   return {
     async findUserById(userId) {
-      const currentState = await adminStateStore.read();
+      const currentState = await readAdminStateSnapshot(adminStateStore, repository);
       const adminUser = findUserRecord(currentState.state.users, userId);
 
       if (adminUser) {
@@ -1019,7 +1005,7 @@ function createAuthenticatedRepository(repository, adminStateStore) {
       return repository.saveLoanReturn(returnRecord);
     },
     async updateUser(user) {
-      const currentState = await adminStateStore.read();
+      const currentState = await readAdminStateSnapshot(adminStateStore, repository);
       const users = upsertUserRecord(currentState.state.users, user);
 
       await adminStateStore.write({
@@ -1035,8 +1021,8 @@ function createAuthenticatedRepository(repository, adminStateStore) {
   };
 }
 
-async function updateAdminStateUser(adminStateStore, userIdOrEmail, updater) {
-  const currentState = await adminStateStore.read();
+async function updateAdminStateUser(adminStateStore, repository, userIdOrEmail, updater) {
+  const currentState = await readAdminStateSnapshot(adminStateStore, repository);
   const index = currentState.state.users.findIndex((user) => {
     const normalizedEmail = String(user.email ?? "").trim().toLowerCase();
     return String(user.id) === String(userIdOrEmail) || normalizedEmail === String(userIdOrEmail).trim().toLowerCase();
@@ -1128,7 +1114,41 @@ function createAuthUserRecord(input) {
   };
 }
 
-async function ensureBootstrapAdmin(adminStateStore) {
+async function readAdminStateSnapshot(adminStateStore, repository = null) {
+  try {
+    const currentState = await adminStateStore.read();
+
+    return {
+      state: normalizeAdminState(currentState.state),
+      updatedAt: currentState.updatedAt ?? null,
+      fallback: false
+    };
+  } catch (error) {
+    if (!repository || typeof repository.getLibrarySnapshot !== "function") {
+      return {
+        state: normalizeAdminState({}),
+        updatedAt: null,
+        fallback: true
+      };
+    }
+
+    const snapshot = await repository.getLibrarySnapshot();
+
+    return {
+      state: normalizeAdminState({
+        books: Array.isArray(snapshot.books) ? snapshot.books : [],
+        users: Array.isArray(snapshot.users) ? snapshot.users : [],
+        loans: Array.isArray(snapshot.loans) ? snapshot.loans : [],
+        waitlists: [],
+        notifications: []
+      }),
+      updatedAt: null,
+      fallback: true
+    };
+  }
+}
+
+async function ensureBootstrapAdmin(adminStateStore, repository = null) {
   const bootstrapEmail = String(process.env.BOOTSTRAP_ADMIN_EMAIL ?? "").trim().toLowerCase();
   const bootstrapPassword = String(process.env.BOOTSTRAP_ADMIN_PASSWORD ?? "").trim();
   const bootstrapName = String(process.env.BOOTSTRAP_ADMIN_NAME ?? "Melina Abreu").trim();
@@ -1137,7 +1157,7 @@ async function ensureBootstrapAdmin(adminStateStore) {
     return;
   }
 
-  const currentState = await adminStateStore.read();
+  const currentState = await readAdminStateSnapshot(adminStateStore, repository);
   const adminUser = createAuthUserRecord({
     id: "bootstrap-admin-melina",
     name: bootstrapName,
@@ -1337,8 +1357,8 @@ async function handleRemoveWaitlistEntry(response, waitlistId, adminStateStore, 
   });
 }
 
-async function mirrorLoanRequestIntoAdminState(adminStateStore, body, loan) {
-  const currentState = await adminStateStore.read();
+async function mirrorLoanRequestIntoAdminState(adminStateStore, repository, body, loan) {
+  const currentState = await readAdminStateSnapshot(adminStateStore, repository);
   const normalizedState = normalizeAdminState(currentState.state);
   const currentUsers = Array.isArray(normalizedState.users) ? normalizedState.users : [];
   const currentLoans = Array.isArray(normalizedState.loans) ? normalizedState.loans : [];
@@ -1385,8 +1405,8 @@ async function mirrorLoanRequestIntoAdminState(adminStateStore, body, loan) {
   });
 }
 
-async function mirrorLoanPickupIntoAdminState(adminStateStore, loan) {
-  const currentState = await adminStateStore.read();
+async function mirrorLoanPickupIntoAdminState(adminStateStore, repository, loan) {
+  const currentState = await readAdminStateSnapshot(adminStateStore, repository);
   const normalizedState = normalizeAdminState(currentState.state);
   const currentUsers = Array.isArray(normalizedState.users) ? normalizedState.users : [];
   const currentLoans = Array.isArray(normalizedState.loans) ? normalizedState.loans : [];
@@ -2133,3 +2153,5 @@ function createRepository() {
 
   return new InMemoryLoanRepository();
 }
+
+
