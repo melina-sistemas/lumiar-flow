@@ -173,8 +173,9 @@ export function App() {
   const displayWaitlists = adminPanel.waitlists;
   const displayNotifications = adminPanel.notifications;
   const libraryBooks = useMemo(
-    () => mergeBooks(catalog.books, displayBooks),
-    [catalog.books, displayBooks]
+    () =>
+      mergeBooks(catalog.books, allBooks).filter((book) => !book.deletedAt),
+    [allBooks, catalog.books]
   );
   const libraryLoans = useMemo(
     () => mergeLoans(catalog.loans, displayLoans),
