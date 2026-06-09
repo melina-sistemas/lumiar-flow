@@ -9,6 +9,12 @@ export function createAdminStateStore() {
     Boolean(process.env.SUPABASE_URL) &&
     Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
 
+  if (!hasSupabaseConfig && process.env.NODE_ENV === "production") {
+    throw new Error(
+      "SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY sao obrigatorios em producao para o admin_state."
+    );
+  }
+
   if (hasSupabaseConfig) {
     return new SupabaseAdminStateStore(getSupabaseConfig());
   }

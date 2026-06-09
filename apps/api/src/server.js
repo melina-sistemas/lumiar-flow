@@ -1258,6 +1258,10 @@ async function readAdminStateSnapshot(adminStateStore, repository = null) {
       fallback: false
     };
   } catch (error) {
+    if (process.env.NODE_ENV === "production") {
+      throw error;
+    }
+
     if (!repository || typeof repository.getLibrarySnapshot !== "function") {
       return {
         state: normalizeAdminState({}),
@@ -2276,6 +2280,12 @@ function createRepository() {
   const hasSupabaseConfig =
     Boolean(process.env.SUPABASE_URL) &&
     Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+  if (!hasSupabaseConfig && process.env.NODE_ENV === "production") {
+    throw new Error(
+      "SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY sao obrigatorios em producao para o repositorio de livros."
+    );
+  }
 
   if (hasSupabaseConfig) {
     return new SupabaseLoanRepository(getSupabaseConfig());

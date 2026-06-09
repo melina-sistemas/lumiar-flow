@@ -22,7 +22,6 @@ import { AdminRulesPage } from "../pages/admin/AdminRulesPage.js";
 import { AdminGamificationPage } from "../pages/admin/AdminGamificationPage.js";
 import { AdminMonitoringPage } from "../pages/admin/AdminMonitoringPage.js";
 import { AdminSettingsPage } from "../pages/admin/AdminSettingsPage.js";
-import { createDevelopmentPlanCatalog } from "../data/development-plan-data.js";
 import { resolveBrandAppearance, resolveThemeMode } from "../features/branding/brand-theme.js";
 import { isLoanActive } from "../features/books/loan-status.js";
 
@@ -34,7 +33,7 @@ const EMPTY_CATALOG = {
   loans: [],
   returns: []
 };
-const FALLBACK_CATALOG = normalizeCatalogPayload(createDevelopmentPlanCatalog());
+let developmentFallbackCatalogPromise = null;
 const API_BASE_URL_OVERRIDE_KEY = "lumiar-flow-api-base-url-override";
 function normalizeAccessLevel(level) {
   const normalized = String(level ?? "").trim().toLowerCase();
@@ -463,21 +462,26 @@ export function App() {
 
       try {
         if (!apiBaseUrl) {
-          const fallbackCatalog = FALLBACK_CATALOG;
-
           if (!ignore) {
-            setCatalog(fallbackCatalog);
-            setCatalogError(null);
+            setCatalog(EMPTY_CATALOG);
+            setCatalogError(
+              import.meta.env.PROD
+                ? "Nao foi possivel conectar ao backend da biblioteca."
+                : null
+            );
             setLoadingCatalog(false);
           }
 
-          const enrichedBooks = await enrichBooksWithGoogleBooks(fallbackCatalog.books);
+          if (!import.meta.env.PROD) {
+            const fallbackCatalog = await getDevelopmentFallbackCatalog();
+            const enrichedBooks = await enrichBooksWithGoogleBooks(fallbackCatalog.books);
 
-          if (!ignore) {
-            setCatalog((current) => ({
-              ...current,
-              books: enrichedBooks
-            }));
+            if (!ignore) {
+              setCatalog((current) => ({
+                ...current,
+                books: enrichedBooks
+              }));
+            }
           }
 
           return;
@@ -501,7 +505,17 @@ export function App() {
           }));
         }
       } catch (error) {
-        const fallbackCatalog = FALLBACK_CATALOG;
+        if (import.meta.env.PROD) {
+          if (!ignore) {
+            setCatalog(EMPTY_CATALOG);
+            setCatalogError("Nao foi possivel carregar o catalogo da API.");
+            setLoadingCatalog(false);
+          }
+
+          return;
+        }
+
+        const fallbackCatalog = await getDevelopmentFallbackCatalog();
 
         if (!ignore) {
           setCatalog(fallbackCatalog);
@@ -509,9 +523,7 @@ export function App() {
           setLoadingCatalog(false);
         }
 
-        if (!import.meta.env.PROD) {
-          console.warn("Falha ao carregar o catalogo remoto; usando catalogo local.", error);
-        }
+        console.warn("Falha ao carregar o catalogo remoto; usando catalogo local.", error);
 
         const enrichedBooks = await enrichBooksWithGoogleBooks(fallbackCatalog.books);
 
@@ -598,7 +610,13 @@ export function App() {
   async function refreshCatalog(preferredBookId) {
     try {
       if (!apiBaseUrl) {
-        const fallbackCatalog = FALLBACK_CATALOG;
+        if (import.meta.env.PROD) {
+          setCatalog(EMPTY_CATALOG);
+          setCatalogError("Nao foi possivel atualizar o catalogo da API.");
+          return;
+        }
+
+        const fallbackCatalog = await getDevelopmentFallbackCatalog();
         setCatalog(fallbackCatalog);
         setCatalogError(null);
 
@@ -634,7 +652,13 @@ export function App() {
         books: enrichedBooks
       }));
     } catch (error) {
-      const fallbackCatalog = FALLBACK_CATALOG;
+      if (import.meta.env.PROD) {
+        setCatalog(EMPTY_CATALOG);
+        setCatalogError("Nao foi possivel atualizar o catalogo da API.");
+        return;
+      }
+
+      const fallbackCatalog = await getDevelopmentFallbackCatalog();
       setCatalog(fallbackCatalog);
       setCatalogError(null);
 
@@ -645,9 +669,7 @@ export function App() {
         books: enrichedBooks
       }));
 
-      if (!import.meta.env.PROD) {
-        console.warn("Falha ao atualizar o catalogo remoto; usando catalogo local.", error);
-      }
+      console.warn("Falha ao atualizar o catalogo remoto; usando catalogo local.", error);
     }
   }
 
@@ -1443,6 +1465,20 @@ function normalizeCatalogPayload(data) {
     adminState: data?.adminState && typeof data.adminState === "object" ? data.adminState : null,
     adminStateUpdatedAt: data?.adminStateUpdatedAt ?? null
   };
+}
+
+async function getDevelopmentFallbackCatalog() {
+  if (import.meta.env.PROD) {
+    return EMPTY_CATALOG;
+  }
+
+  if (!developmentFallbackCatalogPromise) {
+    developmentFallbackCatalogPromise = import("../data/development-plan-data.js").then(
+      ({ createDevelopmentPlanCatalog }) => normalizeCatalogPayload(createDevelopmentPlanCatalog())
+    );
+  }
+
+  return developmentFallbackCatalogPromise;
 }
 
 function mergeBooks(primaryBooks = [], secondaryBooks = []) {

@@ -17,6 +17,7 @@ import {
 } from "../books/loan-status.js";
 
 const STORAGE_KEY = "lumiar-flow-admin-panel-v1";
+const USE_LOCAL_ADMIN_CACHE = !import.meta.env.PROD;
 const BOOTSTRAP_USERS = [
   {
     id: "bootstrap-admin-melina",
@@ -393,8 +394,10 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
     }
 
     const persistedState = catalog.adminStateUpdatedAt ? catalog.adminState : {};
-    const localState = readAdminState();
-    const mergedSnapshot = mergeAdminStateSnapshots(persistedState, localState);
+    const localState = USE_LOCAL_ADMIN_CACHE ? readAdminState() : {};
+    const mergedSnapshot = USE_LOCAL_ADMIN_CACHE
+      ? mergeAdminStateSnapshots(persistedState, localState)
+      : createAdminState(persistedState);
 
     setStateBase((current) =>
       stabilizeAdminState(
@@ -2072,6 +2075,11 @@ function assignBookToUser(userId, bookId) {
 
 function mergeCatalogIntoState(catalog, current) {
   const safeCurrent = createAdminState(current);
+
+  if (import.meta.env.PROD) {
+    return safeCurrent;
+  }
+
   const currentBooks = Array.isArray(current.books) ? current.books : [];
   const currentUsers = Array.isArray(current.users) ? current.users : [];
   const currentLoans = Array.isArray(current.loans) ? current.loans : [];
@@ -2128,6 +2136,11 @@ function createAdminState(rawState = {}) {
 function mergeAdminStateSnapshots(remoteState = {}, localState = {}) {
   const remote = createAdminState(remoteState);
   const local = createAdminState(localState);
+
+  if (import.meta.env.PROD) {
+    return remote;
+  }
+
   const booksById = new Map(remote.books.map((book) => [book.id, book]));
   const usersById = new Map(remote.users.map((user) => [user.id, user]));
 
@@ -3019,6 +3032,10 @@ function buildMonitoring(state, catalog) {
 }
 
 function readAdminState() {
+  if (!USE_LOCAL_ADMIN_CACHE) {
+    return {};
+  }
+
   try {
     const raw = globalThis.localStorage?.getItem(STORAGE_KEY);
     return raw ? JSON.parse(raw) : {};
@@ -3028,6 +3045,10 @@ function readAdminState() {
 }
 
 function writeAdminState(state) {
+  if (!USE_LOCAL_ADMIN_CACHE) {
+    return;
+  }
+
   try {
     globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (error) {
