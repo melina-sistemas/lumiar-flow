@@ -490,6 +490,23 @@ export function createApiServer(repository, adminStateStore) {
         return handleCreateManagedUser(response, body, adminStateStore, repository, currentUser.user);
       }
 
+      const deleteUserMatch = pathname.match(/^\/admin\/users\/([^/]+)$/);
+
+      if (request.method === "DELETE" && deleteUserMatch) {
+        const currentUser = await requireAuthenticatedAdmin(request, adminStateStore, repository);
+        if (!currentUser.ok) {
+          return sendJson(response, currentUser.statusCode, currentUser.payload);
+        }
+
+        return handleDeleteManagedUser(
+          response,
+          deleteUserMatch[1],
+          adminStateStore,
+          repository,
+          currentUser.user
+        );
+      }
+
       return sendJson(response, 404, {
         success: false,
         error: {
@@ -836,6 +853,106 @@ async function handleCreateManagedUser(response, body, adminStateStore, reposito
   });
 }
 
+async function handleDeleteManagedUser(response, userId, adminStateStore, repository, currentAdminUser) {
+  const currentState = await readAdminStateSnapshot(adminStateStore, repository);
+  const repositorySnapshot = await repository.getLibrarySnapshot();
+  const targetUser =
+    findUserRecord(currentState.state.users, userId) ??
+    findUserRecord(repositorySnapshot.users, userId) ??
+    (Array.isArray(repositorySnapshot.users)
+      ? repositorySnapshot.users.find((user) => String(user.id) === String(userId)) ?? null
+      : null);
+
+  if (!targetUser) {
+    return sendJson(response, 404, {
+      success: false,
+      error: {
+        code: "user_not_found",
+        message: "Usuario nao encontrado."
+      }
+    });
+  }
+
+  if (String(targetUser.id) === String(currentAdminUser.id)) {
+    return sendJson(response, 409, {
+      success: false,
+      error: {
+        code: "forbidden_delete_self",
+        message: "Voce nao pode excluir o proprio usuario."
+      }
+    });
+  }
+
+  const hasActiveLoan = (Array.isArray(repositorySnapshot.loans) ? repositorySnapshot.loans : []).some(
+    (loan) =>
+      String(loan.userId) === String(targetUser.id) &&
+      isActiveLoanStatus(loan.status) &&
+      !String(loan.returnedAt ?? "").trim()
+  );
+
+  if (String(targetUser.activeLoanId ?? "").trim() || hasActiveLoan) {
+    return sendJson(response, 409, {
+      success: false,
+      error: {
+        code: "user_has_active_loan",
+        message: "Nao e possivel excluir um usuario com emprestimo ativo."
+      }
+    });
+  }
+
+  const nextState = {
+    ...currentState.state,
+    users: (Array.isArray(currentState.state.users) ? currentState.state.users : []).filter(
+      (user) => String(user.id) !== String(targetUser.id)
+    ),
+    waitlists: normalizeAdminWaitlists(currentState.state.waitlists).filter(
+      (entry) => String(entry.userId) !== String(targetUser.id)
+    )
+  };
+
+  try {
+    await repository.deleteUser(targetUser.id);
+  } catch (error) {
+    return sendJson(response, 500, {
+      success: false,
+      error: {
+        code: "delete_failed",
+        message: "Nao foi possivel excluir o usuario no banco de dados.",
+        details: {
+          message: error instanceof Error ? error.message : String(error)
+        }
+      }
+    });
+  }
+
+  try {
+    const savedState = await adminStateStore.write(nextState);
+
+    return sendJson(response, 200, {
+      success: true,
+      message: "Usuario excluido com sucesso.",
+      adminStateUpdatedAt: savedState.updatedAt
+    });
+  } catch (error) {
+    try {
+      await repository.updateUser(targetUser);
+    } catch {
+      // best effort rollback
+    }
+
+    return sendJson(response, 500, {
+      success: false,
+      error: {
+        code: "delete_failed",
+        message: "Nao foi possivel atualizar o estado administrativo apos a exclusao.",
+        details: {
+          message: error instanceof Error ? error.message : String(error)
+        }
+      }
+    });
+  }
+}
+
 async function requireAuthenticatedUser(request, adminStateStore, repository, options = {}) {
   const session = await resolveSessionFromRequest(request, adminStateStore, repository);
 
@@ -1015,6 +1132,9 @@ function createAuthenticatedRepository(repository, adminStateStore) {
 
       await repository.updateUser(user);
     },
+    async deleteUser(userId) {
+      await repository.deleteUser(userId);
+    },
     async updateBook(book) {
       return repository.updateBook(book);
     }
@@ -1024,6 +1144,10 @@ function createAuthenticatedRepository(repository, adminStateStore) {
 async function updateAdminStateUser(adminStateStore, repository, userIdOrEmail, updater) {
   const currentState = await readAdminStateSnapshot(adminStateStore, repository);
   const index = currentState.state.users.findIndex((user) => {
+    if (isDeletedUserRecord(user)) {
+      return false;
+    }
+
     const normalizedEmail = String(user.email ?? "").trim().toLowerCase();
     return String(user.id) === String(userIdOrEmail) || normalizedEmail === String(userIdOrEmail).trim().toLowerCase();
   });
@@ -1052,8 +1176,12 @@ function findUserRecord(users = [], identifier = "") {
   const normalized = String(identifier ?? "").trim().toLowerCase();
 
   return (
-    users.find((user) => String(user.id) === String(identifier)) ??
-    users.find((user) => String(user.email ?? "").trim().toLowerCase() === normalized) ??
+    users.find((user) => !isDeletedUserRecord(user) && String(user.id) === String(identifier)) ??
+    users.find(
+      (user) =>
+        !isDeletedUserRecord(user) &&
+        String(user.email ?? "").trim().toLowerCase() === normalized
+    ) ??
     null
   );
 }
@@ -1062,8 +1190,10 @@ function upsertUserRecord(users = [], user) {
   const nextUsers = Array.isArray(users) ? users.slice() : [];
   const index = nextUsers.findIndex(
     (item) =>
-      String(item.id) === String(user.id) ||
-      String(item.email ?? "").trim().toLowerCase() === String(user.email ?? "").trim().toLowerCase()
+      !isDeletedUserRecord(item) &&
+      (String(item.id) === String(user.id) ||
+        String(item.email ?? "").trim().toLowerCase() ===
+          String(user.email ?? "").trim().toLowerCase())
   );
 
   if (index >= 0) {
@@ -1075,6 +1205,10 @@ function upsertUserRecord(users = [], user) {
   }
 
   return [user, ...nextUsers];
+}
+
+function isDeletedUserRecord(user) {
+  return Boolean(String(user?.deletedAt ?? "").trim());
 }
 
 function createAuthUserRecord(input) {
@@ -1809,7 +1943,7 @@ function normalizeAdminState(state) {
   return {
     ...state,
     books: Array.isArray(state.books) ? state.books : [],
-    users: Array.isArray(state.users) ? state.users : [],
+    users: (Array.isArray(state.users) ? state.users : []).filter((user) => !isDeletedUserRecord(user)),
     loans: Array.isArray(state.loans) ? state.loans : [],
     waitlists: Array.isArray(state.waitlists) ? state.waitlists : [],
     notifications: Array.isArray(state.notifications) ? state.notifications : []

@@ -899,24 +899,35 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
     );
   }
 
-  function removeUser(userId) {
-    const deletedAt = new Date().toISOString();
+  async function removeUser(userId) {
+    if (!adminApi || typeof adminApi.deleteUser !== "function") {
+      return {
+        success: false,
+        message: "Nao foi possivel conectar ao servidor de autenticacao."
+      };
+    }
 
-    setState((current) =>
-      stabilizeAdminState({
-        ...current,
-        users: current.users.map((user) =>
-          user.id === userId
-            ? normalizeAdminUser({
-                ...user,
-                deletedAt,
-                accessStatus: "blocked",
-                status: "blocked"
-              })
-            : user
-        )
-      })
-    );
+    try {
+      const result = await adminApi.deleteUser(userId);
+
+      setState((current) =>
+        stabilizeAdminState({
+          ...current,
+          users: current.users.filter((user) => String(user.id) !== String(userId)),
+          waitlists: current.waitlists.filter((entry) => String(entry.userId) !== String(userId))
+        })
+      );
+
+      return {
+        success: true,
+        message: result.message ?? "Usuario excluido com sucesso."
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Nao foi possivel excluir o usuario."
+      };
+    }
   }
 
   function changePassword(userId, newPassword) {
@@ -2099,7 +2110,9 @@ function mergeCatalogIntoState(catalog, current) {
 function createAdminState(rawState = {}) {
   return {
     books: Array.isArray(rawState.books) ? rawState.books : [],
-    users: Array.isArray(rawState.users) ? rawState.users : [],
+    users: (Array.isArray(rawState.users) ? rawState.users : []).filter(
+      (user) => !String(user.deletedAt ?? "").trim()
+    ),
     loans: Array.isArray(rawState.loans) ? rawState.loans : [],
     waitlists: Array.isArray(rawState.waitlists) ? rawState.waitlists : [],
     notifications: Array.isArray(rawState.notifications) ? rawState.notifications : [],
@@ -2136,7 +2149,7 @@ function mergeAdminStateSnapshots(remoteState = {}, localState = {}) {
   }
 
   for (const localUser of local.users) {
-    if (!localUser.deletedAt) {
+    if (localUser.deletedAt) {
       continue;
     }
 
@@ -2145,10 +2158,7 @@ function mergeAdminStateSnapshots(remoteState = {}, localState = {}) {
       localUser.id,
       normalizeAdminUser({
         ...(currentUser ?? {}),
-        ...localUser,
-        deletedAt: localUser.deletedAt,
-        accessStatus: localUser.accessStatus ?? "blocked",
-        status: localUser.status ?? "blocked"
+        ...localUser
       })
     );
   }

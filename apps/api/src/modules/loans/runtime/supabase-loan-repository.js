@@ -65,6 +65,15 @@ export class SupabaseLoanRepository {
     await this.upsert("users", mapUserToRow(user), "id");
   }
 
+  async deleteUser(userId) {
+    await this.request(`/rest/v1/users?id=eq.${encodeURIComponent(userId)}`, {
+      method: "DELETE",
+      headers: {
+        Prefer: "return=minimal"
+      }
+    });
+  }
+
   async updateBook(book) {
     await this.update("books", book.id, mapBookToRow(book));
   }

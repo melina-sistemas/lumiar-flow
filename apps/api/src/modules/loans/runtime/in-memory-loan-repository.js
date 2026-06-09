@@ -53,6 +53,10 @@ export class InMemoryLoanRepository {
     }
   }
 
+  async deleteUser(userId) {
+    this.state.users = this.state.users.filter((item) => item.id !== userId);
+  }
+
   async updateBook(book) {
     const index = this.state.books.findIndex((item) => item.id === book.id);
 

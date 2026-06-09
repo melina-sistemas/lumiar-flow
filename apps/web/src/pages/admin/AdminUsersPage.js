@@ -376,19 +376,27 @@ export function AdminUsersPage({ users, loans, books, returns = [], actions }) {
         ? renderConfirmActionModal({
             confirmAction,
             onClose: () => setConfirmAction(null),
-            onConfirm: () => {
+            onConfirm: async () => {
               if (confirmAction.type === "block") {
                 actions.blockUser(confirmAction.user.id);
+                setConfirmAction(null);
+                return;
               }
 
               if (confirmAction.type === "delete") {
-                actions.removeUser(confirmAction.user.id);
+                const result = await Promise.resolve(actions.removeUser(confirmAction.user.id));
+
+                if (!result?.success) {
+                  return;
+                }
+
                 if (selectedUserId === confirmAction.user.id) {
                   setSelectedUserId("");
                 }
-              }
 
-              setConfirmAction(null);
+                setConfirmAction(null);
+                return;
+              }
             }
           })
         : null}

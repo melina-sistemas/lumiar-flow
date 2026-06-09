@@ -39,6 +39,12 @@ export function createAdminApiClient(baseUrl) {
       });
     },
 
+    async deleteUser(userId) {
+      return request(`${baseUrl}/admin/users/${encodeURIComponent(userId)}`, {
+        method: "DELETE"
+      });
+    },
+
     async changePassword(input) {
       const result = await request(`${baseUrl}/auth/password`, {
         method: "POST",

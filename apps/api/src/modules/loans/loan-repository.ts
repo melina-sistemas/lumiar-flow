@@ -22,5 +22,6 @@ export interface LoanRepository {
   saveLoan(loan: Loan): Promise<void>;
   saveLoanReturn(returnRecord: LoanReturn): Promise<void>;
   updateUser(user: TeamUser): Promise<void>;
+  deleteUser(userId: string): Promise<void>;
   updateBook(book: Book): Promise<void>;
 }
