@@ -83,7 +83,10 @@ export function AdminBooksPage({ books, users, loans, actions, apiBaseUrl }) {
         (book.isActive && Number(book.availableQuantity ?? 0) > 0)
     ).length;
     const activeUsers = users.filter(
-      (user) => user.role === "user" || user.role === "staff" || user.role === "admin"
+      (user) =>
+        !String(user.deletedAt ?? "").trim() &&
+        String(user.role ?? "").trim().toLowerCase() !== "admin" &&
+        String(user.accessStatus ?? user.status ?? "").trim().toLowerCase() === "approved"
     ).length;
     const completedLoans = loans.filter((loan) => isLoanReturned(loan.status)).length;
     const ranking = [...users]
@@ -521,7 +524,12 @@ export function AdminBooksPage({ books, users, loans, actions, apiBaseUrl }) {
                       <button
                         type="button"
                         className="admin-icon-button danger"
-                        onClick=${() => actions.removeBook(book.id)}
+                        onClick=${async () => {
+                          const result = await Promise.resolve(actions.removeBook(book.id));
+                          if (result?.message) {
+                            setImportMessage(result.message);
+                          }
+                        }}
                         aria-label="Excluir livro"
                       >
                         <${TableActionIcon} name="trash" />

@@ -23,24 +23,34 @@ export function AdminRequestsPage({ loans, books, users, actions }) {
     return () => globalThis.clearInterval(timer);
   }, []);
 
+  const visibleLoans = useMemo(
+    () =>
+      loans.filter((loan) => {
+        const user = users.find((item) => item.id === loan.userId);
+        const book = books.find((item) => item.id === loan.bookId);
+        return Boolean(user) && Boolean(book) && !user.deletedAt && !book.deletedAt;
+      }),
+    [books, loans, users]
+  );
+
   const pendingRequests = useMemo(
-    () => loans.filter((loan) => isLoanPendingApproval(loan.status)),
-    [loans]
+    () => visibleLoans.filter((loan) => isLoanPendingApproval(loan.status)),
+    [visibleLoans]
   );
 
   const returnRequests = useMemo(
-    () => loans.filter((loan) => isLoanReturnRequested(loan.status)),
-    [loans]
+    () => visibleLoans.filter((loan) => isLoanReturnRequested(loan.status)),
+    [visibleLoans]
   );
 
   const rejectedRequests = useMemo(
-    () => loans.filter((loan) => normalizeLoanStatus(loan.status) === "RECUSADO"),
-    [loans]
+    () => visibleLoans.filter((loan) => normalizeLoanStatus(loan.status) === "RECUSADO"),
+    [visibleLoans]
   );
 
   const activeLoans = useMemo(
-    () => loans.filter((loan) => isLoanBorrowed(loan.status) || isLoanApproved(loan.status)),
-    [loans]
+    () => visibleLoans.filter((loan) => isLoanBorrowed(loan.status) || isLoanApproved(loan.status)),
+    [visibleLoans]
   );
 
   function handleApprove(loanId, approval) {

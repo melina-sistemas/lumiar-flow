@@ -7,6 +7,7 @@ const html = htm.bind(React.createElement);
 
 export function AdminUsersPage({ users, loans, books, returns = [], actions }) {
   const [selectedUserId, setSelectedUserId] = useState("");
+  const [selectedUserIds, setSelectedUserIds] = useState([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null);
   const [showFilters, setShowFilters] = useState(false);
@@ -22,10 +23,11 @@ export function AdminUsersPage({ users, loans, books, returns = [], actions }) {
   const [adminCreateForm, setAdminCreateForm] = useState({
     name: "",
     email: "",
+    temporaryPassword: "",
     cpf: "",
     company: "",
     department: "",
-    role: "staff",
+    role: "user",
     level: "bronze"
   });
 
@@ -174,9 +176,56 @@ export function AdminUsersPage({ users, loans, books, returns = [], actions }) {
           : null}
       </div>
 
-      <button type="button" className="admin-primary" onClick=${() => setShowCreateModal(true)}>
-        + Novo usuário
-      </button>
+      <div className="admin-users-toolbar-actions-group">
+        ${selectedUserIds.length > 0
+          ? html`
+              <button
+                type="button"
+                className="admin-secondary"
+                onClick=${async () => {
+                  const selectedUsers = filteredUsers.filter((user) =>
+                    selectedUserIds.includes(user.id)
+                  );
+
+                  if (selectedUsers.length === 0) {
+                    return;
+                  }
+
+                  const confirmed = globalThis.confirm(
+                    `Deseja excluir ${selectedUsers.length} usuário(s) selecionado(s)?`
+                  );
+
+                  if (!confirmed) {
+                    return;
+                  }
+
+                  let deleted = 0;
+
+                  for (const user of selectedUsers) {
+                    const result = await Promise.resolve(actions.removeUser(user.id));
+                    if (result?.success) {
+                      deleted += 1;
+                    }
+                  }
+
+                  setSelectedUserIds([]);
+                  setSelectedUserId("");
+                  setAdminCreateFeedback(
+                    deleted > 0
+                      ? `${deleted} usuário(s) excluído(s) com sucesso.`
+                      : "Nenhum usuário pôde ser excluído."
+                  );
+                }}
+              >
+                Excluir selecionados (${selectedUserIds.length})
+              </button>
+            `
+          : null}
+
+        <button type="button" className="admin-primary" onClick=${() => setShowCreateModal(true)}>
+          + Novo usuário
+        </button>
+      </div>
     </div>
   `;
 
@@ -281,6 +330,19 @@ export function AdminUsersPage({ users, loans, books, returns = [], actions }) {
                       </button>
 
                       <div className="admin-user-row-actions">
+                        <label className="admin-user-select-toggle" title="Selecionar usuário">
+                          <input
+                            type="checkbox"
+                            checked=${selectedUserIds.includes(user.id)}
+                            onChange=${() =>
+                              setSelectedUserIds((current) =>
+                                current.includes(user.id)
+                                  ? current.filter((id) => id !== user.id)
+                                  : [...current, user.id]
+                              )}
+                          />
+                          <span className="sr-only">Selecionar usuário</span>
+                        </label>
                         <button
                           type="button"
                           className="admin-icon-button"
@@ -347,10 +409,11 @@ export function AdminUsersPage({ users, loans, books, returns = [], actions }) {
                 setAdminCreateForm({
                   name: "",
                   email: "",
+                  temporaryPassword: "",
                   cpf: "",
                   company: "",
                   department: "",
-                  role: "staff",
+                  role: "user",
                   level: "bronze"
                 });
                 setShowCreateModal(false);
@@ -383,6 +446,27 @@ export function AdminUsersPage({ users, loans, books, returns = [], actions }) {
                 return;
               }
 
+              if (confirmAction.type === "bulk-delete") {
+                let deleted = 0;
+
+                for (const user of confirmAction.users ?? []) {
+                  const result = await Promise.resolve(actions.removeUser(user.id));
+                  if (result?.success) {
+                    deleted += 1;
+                  }
+                }
+
+                setSelectedUserIds([]);
+                setSelectedUserId("");
+                setConfirmAction(null);
+                setAdminCreateFeedback(
+                  deleted > 0
+                    ? `${deleted} usuário(s) excluído(s) com sucesso.`
+                    : "Nenhum usuário pôde ser excluído."
+                );
+                return;
+              }
+
               if (confirmAction.type === "delete") {
                 const result = await Promise.resolve(actions.removeUser(confirmAction.user.id));
 
@@ -393,6 +477,8 @@ export function AdminUsersPage({ users, loans, books, returns = [], actions }) {
                 if (selectedUserId === confirmAction.user.id) {
                   setSelectedUserId("");
                 }
+
+                setSelectedUserIds((current) => current.filter((id) => id !== confirmAction.user.id));
 
                 setConfirmAction(null);
                 return;
@@ -436,6 +522,18 @@ function renderCreateUserModal({
             <input
               value=${adminCreateForm.email}
               onInput=${(event) => onChange((current) => ({ ...current, email: event.target.value }))}
+            />
+          </label>
+
+          <label>
+            <span>Senha temporária</span>
+            <input
+              type="password"
+              value=${adminCreateForm.temporaryPassword}
+              onInput=${(event) =>
+                onChange((current) => ({ ...current, temporaryPassword: event.target.value }))}
+              placeholder="Defina a senha inicial"
+              required
             />
           </label>
 
@@ -860,13 +958,16 @@ function UserProfileModal({ user, books, history, actions, onClose }) {
 }
 
 function renderConfirmActionModal({ confirmAction, onClose, onConfirm }) {
-  const isDelete = confirmAction.type === "delete";
-  const isBlocked = confirmAction.user.accessStatus === "blocked";
-  const title = isDelete
-    ? "Confirmar exclusão"
-    : isBlocked
-      ? "Confirmar desbloqueio"
-      : "Confirmar bloqueio";
+    const isBulkDelete = confirmAction.type === "bulk-delete";
+    const isDelete = confirmAction.type === "delete" || isBulkDelete;
+    const isBlocked = confirmAction.user?.accessStatus === "blocked";
+    const title = isDelete
+      ? isBulkDelete
+        ? "Confirmar exclusão em lote"
+        : "Confirmar exclusão"
+      : isBlocked
+        ? "Confirmar desbloqueio"
+        : "Confirmar bloqueio";
   const message = isDelete
       ? `Deseja realmente excluir o usuário ${confirmAction.user.name}? Esta ação remove o cadastro da lista.`
     : isBlocked

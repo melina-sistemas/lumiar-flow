@@ -8,7 +8,6 @@ const html = htm.bind(React.createElement);
 const MAIN_NAV = [
   { label: "Livros", to: "/livros", icon: "books" },
   { label: "Minha Conta", to: "/minha-conta", icon: "users" },
-  { label: "Usuários", to: "/usuarios", icon: "users" },
   { label: "Desempenho", to: "/desempenho", icon: "chart" },
   { label: "Relatórios", to: "/relatorios", icon: "report" }
 ];
@@ -27,14 +26,10 @@ export function Sidebar({ currentUser, isAuthenticated, branding = null }) {
   const location = useLocation();
   const isAdminArea = location.pathname.startsWith("/admin");
   const isAdminUser = currentUser?.role === "admin";
-  const logoSrc = branding?.logoCompactSrc ?? branding?.logoSrc ?? "/storage/branding/icon-vertical-gold.png";
+  const logoSrc =
+    branding?.logoCompactSrc ?? branding?.logoSrc ?? "/storage/branding/icon-vertical-gold.png";
   const systemName = branding?.systemName ?? "Lumiar Flow";
   const slogan = branding?.slogan ?? "Conhecimento em movimento.";
-  const visibleMainNav = isAuthenticated
-    ? MAIN_NAV.filter((item) =>
-        ["/usuarios", "/desempenho", "/relatorios"].includes(item.to) ? isAdminUser : true
-      )
-    : MAIN_NAV.filter((item) => item.to === "/livros");
 
   return html`
     <aside className="app-sidebar">
@@ -54,7 +49,7 @@ export function Sidebar({ currentUser, isAuthenticated, branding = null }) {
       <nav className="sidebar-nav">
         <div className="sidebar-group">
           <span className="sidebar-group-title">Navegação</span>
-          ${visibleMainNav.map((item) => renderNavItem(item))}
+          ${renderMainNav({ isAuthenticated, isAdminUser })}
         </div>
 
         ${isAuthenticated && isAdminUser
@@ -112,6 +107,16 @@ export function Sidebar({ currentUser, isAuthenticated, branding = null }) {
         : null}
     </aside>
   `;
+}
+
+function renderMainNav({ isAuthenticated, isAdminUser }) {
+  const visibleMainNav = isAuthenticated
+    ? MAIN_NAV.filter((item) =>
+        ["/desempenho", "/relatorios"].includes(item.to) ? isAdminUser : true
+      )
+    : MAIN_NAV.filter((item) => item.to === "/livros");
+
+  return html`${visibleMainNav.map((item) => renderNavItem(item))}`;
 }
 
 function renderNavItem(item, nested = false) {

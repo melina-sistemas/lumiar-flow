@@ -66,12 +66,25 @@ export class SupabaseLoanRepository {
   }
 
   async deleteUser(userId) {
-    await this.request(`/rest/v1/users?id=eq.${encodeURIComponent(userId)}`, {
-      method: "DELETE",
-      headers: {
-        Prefer: "return=minimal"
-      }
-    });
+    await Promise.all([
+      this.deleteRows("users", { id: `eq.${userId}` }),
+      this.deleteRows("loans", { user_id: `eq.${userId}` }),
+      this.deleteRows("returns", { user_id: `eq.${userId}` }),
+      this.deleteRowsOptional("book_recommendations", { user_id: `eq.${userId}` })
+    ]);
+  }
+
+  async saveBook(book) {
+    await this.upsert("books", mapBookToRow(book), "id");
+  }
+
+  async deleteBook(bookId) {
+    await Promise.all([
+      this.deleteRows("books", { id: `eq.${bookId}` }),
+      this.deleteRows("loans", { book_id: `eq.${bookId}` }),
+      this.deleteRows("returns", { book_id: `eq.${bookId}` }),
+      this.deleteRowsOptional("book_recommendations", { book_id: `eq.${bookId}` })
+    ]);
   }
 
   async updateBook(book) {
@@ -138,6 +151,36 @@ export class SupabaseLoanRepository {
       },
       body: JSON.stringify(payload)
     });
+  }
+
+  async deleteRows(table, filters = {}) {
+    const query = new URLSearchParams();
+
+    for (const [key, value] of Object.entries(filters)) {
+      query.set(key, value);
+    }
+
+    await this.request(`/rest/v1/${table}?${query.toString()}`, {
+      method: "DELETE",
+      headers: {
+        Prefer: "return=minimal"
+      }
+    });
+  }
+
+  async deleteRowsOptional(table, filters = {}) {
+    try {
+      await this.deleteRows(table, filters);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        /schema cache|relation .* does not exist|Could not find the table/i.test(error.message)
+      ) {
+        return;
+      }
+
+      throw error;
+    }
   }
 
   async request(path, init) {
@@ -207,11 +250,20 @@ function mapBook(row) {
     isPremium: row.is_premium,
     totalCopies: row.total_copies,
     availableCopies: row.available_copies,
+    totalQuantity: row.total_copies,
+    availableQuantity: row.available_copies,
     isActive: row.is_active
   };
 }
 
 function mapBookToRow(book) {
+  const totalCopies = Number(
+    book.totalCopies ?? book.totalQuantity ?? book.total_copies ?? 1
+  );
+  const availableCopies = Number(
+    book.availableCopies ?? book.availableQuantity ?? book.available_copies ?? totalCopies
+  );
+
   return {
     id: book.id,
     title: book.title,
@@ -220,9 +272,9 @@ function mapBookToRow(book) {
     isbn: book.isbn ?? null,
     level: book.level,
     is_premium: book.isPremium,
-    total_copies: book.totalCopies,
-    available_copies: book.availableCopies,
-    is_active: book.isActive,
+    total_copies: totalCopies,
+    available_copies: availableCopies,
+    is_active: book.isActive !== false,
     updated_at: new Date().toISOString()
   };
 }

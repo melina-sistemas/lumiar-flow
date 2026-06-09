@@ -17,15 +17,6 @@ const MENU_GROUPS = [
     ]
   },
   {
-    label: "Usuários",
-    to: "/usuarios",
-    items: [
-      { label: "Ranking", to: "/usuarios/ranking" },
-      { label: "Perfil", to: "/usuarios/perfil" },
-      { label: "Histórico", to: "/usuarios/historico" }
-    ]
-  },
-  {
     label: "Desempenho",
     to: "/desempenho",
     items: [
@@ -59,8 +50,7 @@ const ADMIN_GROUP = {
 };
 
 export function Navbar({ currentUser, branding = null }) {
-  const menuGroups =
-    currentUser?.role === "admin" ? [...MENU_GROUPS, ADMIN_GROUP] : MENU_GROUPS;
+  const menuGroups = currentUser?.role === "admin" ? [...MENU_GROUPS, ADMIN_GROUP] : MENU_GROUPS;
   const logoSrc = branding?.logoPrimarySrc ?? branding?.logoSrc ?? "/storage/branding/logo-lumiar.png";
   const systemName = branding?.systemName ?? "Lumiar Flow";
   const [firstPart, ...restParts] = systemName.split(" ");
@@ -107,8 +97,7 @@ export function Navbar({ currentUser, branding = null }) {
                 (item) => html`
                   <${NavLink}
                     key=${item.to}
-                    className=${({ isActive }) =>
-                      `dropdown-item ${isActive ? "active" : ""}`}
+                    className=${({ isActive }) => `dropdown-item ${isActive ? "active" : ""}`}
                     to=${item.to}
                   >
                     ${item.label}

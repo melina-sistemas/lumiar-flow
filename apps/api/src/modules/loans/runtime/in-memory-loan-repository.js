@@ -55,6 +55,27 @@ export class InMemoryLoanRepository {
 
   async deleteUser(userId) {
     this.state.users = this.state.users.filter((item) => item.id !== userId);
+    this.state.loans = this.state.loans.filter((item) => item.userId !== userId);
+    this.state.returns = this.state.returns.filter((item) => item.userId !== userId);
+    this.state.recommendations = this.state.recommendations.filter((item) => item.userId !== userId);
+  }
+
+  async saveBook(book) {
+    const index = this.state.books.findIndex((item) => item.id === book.id);
+
+    if (index >= 0) {
+      this.state.books[index] = { ...book };
+      return;
+    }
+
+    this.state.books.push({ ...book });
+  }
+
+  async deleteBook(bookId) {
+    this.state.books = this.state.books.filter((item) => item.id !== bookId);
+    this.state.loans = this.state.loans.filter((item) => item.bookId !== bookId);
+    this.state.returns = this.state.returns.filter((item) => item.bookId !== bookId);
+    this.state.recommendations = this.state.recommendations.filter((item) => item.bookId !== bookId);
   }
 
   async updateBook(book) {

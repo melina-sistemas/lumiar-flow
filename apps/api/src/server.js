@@ -332,6 +332,23 @@ export function createApiServer(repository, adminStateStore) {
         });
       }
 
+      const deleteBookMatch = pathname.match(/^\/admin\/books\/([^/]+)$/);
+
+      if (request.method === "DELETE" && deleteBookMatch) {
+        const currentUser = await requireAuthenticatedAdmin(request, adminStateStore, repository);
+        if (!currentUser.ok) {
+          return sendJson(response, currentUser.statusCode, currentUser.payload);
+        }
+
+        return handleDeleteManagedBook(
+          response,
+          deleteBookMatch[1],
+          adminStateStore,
+          repository,
+          currentUser.user
+        );
+      }
+
       if (request.method === "POST" && pathname === "/admin/state") {
         const currentUser = await requireAuthenticatedAdmin(request, adminStateStore, repository);
         if (!currentUser.ok) {
@@ -883,30 +900,22 @@ async function handleDeleteManagedUser(response, userId, adminStateStore, reposi
     });
   }
 
-  const hasActiveLoan = (Array.isArray(repositorySnapshot.loans) ? repositorySnapshot.loans : []).some(
-    (loan) =>
-      String(loan.userId) === String(targetUser.id) &&
-      isActiveLoanStatus(loan.status) &&
-      !String(loan.returnedAt ?? "").trim()
-  );
-
-  if (String(targetUser.activeLoanId ?? "").trim() || hasActiveLoan) {
-    return sendJson(response, 409, {
-      success: false,
-      error: {
-        code: "user_has_active_loan",
-        message: "Nao e possivel excluir um usuario com emprestimo ativo."
-      }
-    });
-  }
-
   const nextState = {
     ...currentState.state,
     users: (Array.isArray(currentState.state.users) ? currentState.state.users : []).filter(
       (user) => String(user.id) !== String(targetUser.id)
     ),
+    loans: (Array.isArray(currentState.state.loans) ? currentState.state.loans : []).filter(
+      (loan) => String(loan.userId) !== String(targetUser.id)
+    ),
+    returns: (Array.isArray(currentState.state.returns) ? currentState.state.returns : []).filter(
+      (record) => String(record.userId) !== String(targetUser.id)
+    ),
     waitlists: normalizeAdminWaitlists(currentState.state.waitlists).filter(
       (entry) => String(entry.userId) !== String(targetUser.id)
+    ),
+    notifications: (Array.isArray(currentState.state.notifications) ? currentState.state.notifications : []).filter(
+      (notification) => String(notification.userId) !== String(targetUser.id)
     )
   };
 
@@ -940,6 +949,68 @@ async function handleDeleteManagedUser(response, userId, adminStateStore, reposi
       // best effort rollback
     }
 
+    return sendJson(response, 500, {
+      success: false,
+      error: {
+        code: "delete_failed",
+        message: "Nao foi possivel atualizar o estado administrativo apos a exclusao.",
+        details: {
+          message: error instanceof Error ? error.message : String(error)
+        }
+      }
+    });
+  }
+}
+
+async function handleDeleteManagedBook(response, bookId, adminStateStore, repository, currentAdminUser) {
+  const currentState = await readAdminStateSnapshot(adminStateStore, repository);
+  const repositorySnapshot = await repository.getLibrarySnapshot();
+  const targetBook =
+    (Array.isArray(currentState.state.books) ? currentState.state.books : []).find(
+      (book) => String(book.id) === String(bookId)
+    ) ??
+    (Array.isArray(repositorySnapshot.books) ? repositorySnapshot.books : []).find(
+      (book) => String(book.id) === String(bookId)
+    ) ??
+    null;
+
+  if (!targetBook) {
+    return sendJson(response, 404, {
+      success: false,
+      error: {
+        code: "book_not_found",
+        message: "Livro nao encontrado."
+      }
+    });
+  }
+
+  const deletedBookId = String(targetBook.id);
+  const nextState = removeBookFromAdminState(currentState.state, deletedBookId);
+
+  try {
+    await repository.deleteBook(deletedBookId);
+  } catch (error) {
+    return sendJson(response, 500, {
+      success: false,
+      error: {
+        code: "delete_failed",
+        message: "Nao foi possivel excluir o livro no banco de dados.",
+        details: {
+          message: error instanceof Error ? error.message : String(error)
+        }
+      }
+    });
+  }
+
+  try {
+    const savedState = await adminStateStore.write(nextState);
+
+    return sendJson(response, 200, {
+      success: true,
+      message: "Livro excluido com sucesso.",
+      adminStateUpdatedAt: savedState.updatedAt
+    });
+  } catch (error) {
     return sendJson(response, 500, {
       success: false,
       error: {
@@ -1134,6 +1205,9 @@ function createAuthenticatedRepository(repository, adminStateStore) {
     },
     async deleteUser(userId) {
       await repository.deleteUser(userId);
+    },
+    async deleteBook(bookId) {
+      await repository.deleteBook(bookId);
     },
     async updateBook(book) {
       return repository.updateBook(book);
@@ -2057,6 +2131,48 @@ function normalizeNotification(notification) {
     readAt: notification?.readAt ?? "",
     dismissedAt: notification?.dismissedAt ?? "",
     metadata: notification?.metadata ?? {}
+  };
+}
+
+function removeBookFromAdminState(state, bookId) {
+  const deletedBookId = String(bookId);
+  const nextBooks = (Array.isArray(state.books) ? state.books : []).filter(
+    (book) => String(book.id) !== deletedBookId
+  );
+  const nextLoans = (Array.isArray(state.loans) ? state.loans : []).filter(
+    (loan) => String(loan.bookId) !== deletedBookId
+  );
+  const nextWaitlists = normalizeAdminWaitlists(state.waitlists).filter(
+    (entry) => String(entry.bookId) !== deletedBookId
+  );
+  const nextNotifications = (Array.isArray(state.notifications) ? state.notifications : []).filter(
+    (notification) => String(notification.bookId) !== deletedBookId
+  );
+  const nextUsers = (Array.isArray(state.users) ? state.users : []).map((user) => {
+    const readingList = Array.isArray(user.readingList)
+      ? user.readingList.filter((item) => String(item) !== deletedBookId)
+      : [];
+    const recommendedBookIds = Array.isArray(user.recommendedBookIds)
+      ? user.recommendedBookIds.filter((item) => String(item) !== deletedBookId)
+      : user.recommendedBookId && String(user.recommendedBookId) !== deletedBookId
+        ? [user.recommendedBookId]
+        : [];
+
+    return {
+      ...user,
+      readingList,
+      recommendedBookIds,
+      recommendedBookId: recommendedBookIds[0] ?? ""
+    };
+  });
+
+  return {
+    ...state,
+    books: nextBooks,
+    loans: nextLoans,
+    waitlists: nextWaitlists,
+    notifications: nextNotifications,
+    users: nextUsers
   };
 }
 

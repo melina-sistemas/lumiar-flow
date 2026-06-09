@@ -680,23 +680,56 @@ export function useAdminPanel(catalog, currentUser = null, apiBaseUrl = "", cata
     );
   }
 
-  function removeBook(bookId) {
-    const deletedAt = new Date().toISOString();
+  async function removeBook(bookId) {
+    if (!adminApi || typeof adminApi.deleteBook !== "function") {
+      return {
+        success: false,
+        message: "Nao foi possivel conectar ao servidor de autenticacao."
+      };
+    }
 
-    setState((current) =>
-      stabilizeAdminState({
-        ...current,
-        books: current.books.map((book) =>
-          book.id === bookId
-            ? normalizeAdminBook({
-                ...book,
-                deletedAt,
-                isActive: false
-              })
-            : book
-        )
-      })
-    );
+    try {
+      const result = await adminApi.deleteBook(bookId);
+
+      setState((current) =>
+        stabilizeAdminState({
+          ...current,
+          books: current.books.filter((book) => String(book.id) !== String(bookId)),
+          loans: current.loans.filter((loan) => String(loan.bookId) !== String(bookId)),
+          waitlists: current.waitlists.filter((entry) => String(entry.bookId) !== String(bookId)),
+          notifications: current.notifications.filter(
+            (entry) => String(entry.bookId) !== String(bookId)
+          ),
+          users: current.users.map((user) => {
+            const readingList = Array.isArray(user.readingList)
+              ? user.readingList.filter((item) => String(item) !== String(bookId))
+              : [];
+            const recommendedBookIds = Array.isArray(user.recommendedBookIds)
+              ? user.recommendedBookIds.filter((item) => String(item) !== String(bookId))
+              : user.recommendedBookId && String(user.recommendedBookId) !== String(bookId)
+                ? [user.recommendedBookId]
+                : [];
+
+            return normalizeAdminUser({
+              ...user,
+              readingList,
+              recommendedBookIds,
+              recommendedBookId: recommendedBookIds[0] ?? ""
+            });
+          })
+        })
+      );
+
+      return {
+        success: true,
+        message: result.message ?? "Livro excluido com sucesso."
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Nao foi possivel excluir o livro."
+      };
+    }
   }
 
   function importBooks(books) {

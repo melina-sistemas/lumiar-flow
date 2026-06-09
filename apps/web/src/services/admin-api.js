@@ -45,6 +45,12 @@ export function createAdminApiClient(baseUrl) {
       });
     },
 
+    async deleteBook(bookId) {
+      return request(`${baseUrl}/admin/books/${encodeURIComponent(bookId)}`, {
+        method: "DELETE"
+      });
+    },
+
     async changePassword(input) {
       const result = await request(`${baseUrl}/auth/password`, {
         method: "POST",

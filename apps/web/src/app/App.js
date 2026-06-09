@@ -155,7 +155,8 @@ export function App() {
   const hasApprovedAccess = isAuthenticated && isApprovedAuthUser(activeAuthUser);
   const canUseLibraryAccess = hasApprovedAccess;
   const isBooksRoute = location.pathname.startsWith("/livros");
-  const isUsersRoute = location.pathname.startsWith("/usuarios");
+  const isUsersRoute =
+    location.pathname.startsWith("/admin/users") || location.pathname.startsWith("/usuarios");
   const isReportsRoute = location.pathname.startsWith("/relatorios");
   const showHeaderSearch = isBooksRoute || isUsersRoute || isReportsRoute;
   const allUsers = adminPanel.users;
@@ -838,7 +839,7 @@ export function App() {
               if (suggestion.bookId) {
                 navigate(isReportsRoute ? "/relatorios" : "/livros");
               } else if (suggestion.userId) {
-                navigate(isReportsRoute ? "/relatorios" : "/usuarios");
+                navigate(isReportsRoute ? "/relatorios" : "/admin/users");
               } else if (suggestion.reportPath) {
                 navigate(suggestion.reportPath);
               }
@@ -923,19 +924,7 @@ export function App() {
           />
           <${Route}
             path="/usuarios"
-            element=${renderAdminPage(
-              activeAuthUser,
-              adminPanel,
-              React.createElement(AdminUsersPage, {
-              users: filteredUsers,
-              loans: adminPanel.loans,
-              books: adminPanel.books,
-              returns: catalog.returns,
-              waitlists: displayWaitlists,
-              notifications: displayNotifications,
-              actions: adminPanel.actions
-              })
-            )}
+            element=${React.createElement(Navigate, { to: "/admin/users", replace: true })}
           />
           <${Route}
             path="/minha-conta"
@@ -953,51 +942,15 @@ export function App() {
           />
           <${Route}
             path="/usuarios/ranking"
-            element=${renderAdminPage(
-              activeAuthUser,
-              adminPanel,
-              React.createElement(AdminUsersPage, {
-              users: filteredUsers,
-              loans: adminPanel.loans,
-              books: adminPanel.books,
-              returns: catalog.returns,
-              waitlists: displayWaitlists,
-              notifications: displayNotifications,
-              actions: adminPanel.actions
-            })
-          )}
+            element=${React.createElement(Navigate, { to: "/admin/users", replace: true })}
           />
           <${Route}
             path="/usuarios/perfil"
-            element=${renderAdminPage(
-              activeAuthUser,
-              adminPanel,
-              React.createElement(AdminUsersPage, {
-              users: filteredUsers,
-              loans: adminPanel.loans,
-              books: adminPanel.books,
-              returns: catalog.returns,
-              waitlists: displayWaitlists,
-              notifications: displayNotifications,
-              actions: adminPanel.actions
-            })
-          )}
+            element=${React.createElement(Navigate, { to: "/admin/users", replace: true })}
           />
           <${Route}
             path="/usuarios/historico"
-            element=${renderAdminPage(
-              activeAuthUser,
-              adminPanel,
-              React.createElement(AdminUsersPage, {
-              users: filteredUsers,
-              loans: adminPanel.loans,
-              books: adminPanel.books,
-              returns: catalog.returns,
-              waitlists: displayWaitlists,
-              notifications: displayNotifications,
-              actions: adminPanel.actions
-            })
-          )}
+            element=${React.createElement(Navigate, { to: "/admin/users", replace: true })}
           />
           <${Route}
             path="/desempenho"
@@ -1562,6 +1515,10 @@ function getSearchPlaceholder(pathname) {
     return "Buscar usuários por nome, e-mail ou setor";
   }
 
+  if (pathname.startsWith("/admin/users")) {
+    return "Buscar usuários por nome, e-mail ou setor";
+  }
+
   if (pathname.startsWith("/desempenho")) {
     return "Buscar métricas, níveis ou leitores";
   }
@@ -1587,6 +1544,10 @@ function getSearchEmptyText(pathname) {
   }
 
   if (pathname.startsWith("/usuarios")) {
+    return "Nenhum usuário parecido encontrado.";
+  }
+
+  if (pathname.startsWith("/admin/users")) {
     return "Nenhum usuário parecido encontrado.";
   }
 
